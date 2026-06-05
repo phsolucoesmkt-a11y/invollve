@@ -7,10 +7,9 @@ export default async function PortalPage() {
   const session = await getSession()
   if (!session) redirect('/login')
 
-  // Find client linked to this user's email
-  const client = db.prepare('SELECT * FROM clients WHERE email = ?').get(session.email) as any
+  const client = await db.get<any>('SELECT * FROM clients WHERE email = ?', [session.email])
   const clientData = client
-    ? (db.prepare('SELECT * FROM client_data WHERE client_id = ? ORDER BY metric').all(client.id) as any[])
+    ? await db.all<any>('SELECT * FROM client_data WHERE client_id = ? ORDER BY metric', [client.id])
     : []
 
   return (

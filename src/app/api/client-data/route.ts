@@ -29,7 +29,7 @@ export async function PUT(req: NextRequest) {
   if (!session || session.role === 'cliente') return NextResponse.json({ error: 'Não autorizado' }, { status: 403 })
   const { id, ...body } = await req.json()
   await db.run(
-    'UPDATE client_data SET metric=?, value=?, period=?, notes=?, updated_at=datetime('now') WHERE id=?',
+    `UPDATE client_data SET metric=?, value=?, period=?, notes=?, updated_at=datetime('now') WHERE id=?`,
     [body.metric, body.value, body.period, body.notes, id]
   )
   return NextResponse.json({ ok: true })

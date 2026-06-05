@@ -3,20 +3,22 @@ import db from '@/lib/db'
 
 export default async function DashboardHome() {
   const session = await getSession()
-  const totalClients = (db.prepare('SELECT COUNT(*) as c FROM clients').get() as any).c
-  const totalTasks = (db.prepare(`SELECT COUNT(*) as c FROM tasks WHERE status != 'done'`).get() as any).c
-  const todoBirthdays = db.prepare(`
+  const totalClientsRow = await db.get<{ c: number }>('SELECT COUNT(*) as c FROM clients')
+  const totalClients = totalClientsRow?.c ?? 0
+  const totalTasksRow = await db.get<{ c: number }>(`SELECT COUNT(*) as c FROM tasks WHERE status != 'done'`)
+  const totalTasks = totalTasksRow?.c ?? 0
+  const todoBirthdays = await db.all(`
     SELECT name, birthday FROM rh_people
     WHERE birthday IS NOT NULL AND birthday != ''
     AND strftime('%m-%d', birthday) >= strftime('%m-%d', 'now')
     AND strftime('%m-%d', birthday) <= strftime('%m-%d', 'now', '+30 days')
     ORDER BY strftime('%m-%d', birthday)
     LIMIT 5
-  `).all() as any[]
+  `) as any[]
 
-  const upcomingMeetings = db.prepare(`
+  const upcomingMeetings = await db.all(`
     SELECT * FROM meetings WHERE start_time >= datetime('now') ORDER BY start_time LIMIT 3
-  `).all() as any[]
+  `) as any[]
 
   return (
     <div>
