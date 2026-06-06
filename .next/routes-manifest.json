@@ -96,6 +96,12 @@
       "namedRegex": "^/api/drive(?:/)?$"
     },
     {
+      "page": "/api/export",
+      "regex": "^/api/export(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/export(?:/)?$"
+    },
+    {
       "page": "/api/financial",
       "regex": "^/api/financial(?:/)?$",
       "routeKeys": {},

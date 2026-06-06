@@ -10,6 +10,7 @@
   "/api/clients/route": "/api/clients",
   "/api/comercial/route": "/api/comercial",
   "/api/drive/route": "/api/drive",
+  "/api/export/route": "/api/export",
   "/api/financial/route": "/api/financial",
   "/api/meetings/route": "/api/meetings",
   "/api/meta-insights/route": "/api/meta-insights",
