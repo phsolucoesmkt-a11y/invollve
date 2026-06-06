@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     'INSERT INTO drive_links (name, url, category, client_id) VALUES (?, ?, ?, ?)',
     [name, url, category, client_id || null]
   )
-  return NextResponse.json({ id: result.lastInsertRowid })
+  return NextResponse.json({ id: Number(result.lastInsertRowid) })
 }
 
 export async function DELETE(req: NextRequest) {
