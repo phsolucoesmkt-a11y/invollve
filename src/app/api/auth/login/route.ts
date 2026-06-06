@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   await seedAdmin()
   const { email, password } = await req.json()
 
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as any
+  const user = await db.get<any>('SELECT * FROM users WHERE email = ?', [email])
   if (!user) return NextResponse.json({ error: 'Email ou senha inválidos' }, { status: 401 })
 
   const valid = await bcrypt.compare(password, user.password)
