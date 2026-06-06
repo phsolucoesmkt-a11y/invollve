@@ -14,9 +14,7 @@
 /coverage
 
 # next.js
-# /.next/  # temporarily enabled for deployment
-/.next/dev
-/.next/cache
+/.next/
 /out/
 
 # production
