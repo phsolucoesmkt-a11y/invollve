@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { UserSession, PERMISSIONS } from '@/lib/auth'
 
 const navItems = [
@@ -23,6 +24,7 @@ const navItems = [
 export default function Sidebar({ session }: { session: UserSession }) {
   const pathname = usePathname()
   const router = useRouter()
+  const [collapsed, setCollapsed] = useState(false)
 
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -34,44 +36,63 @@ export default function Sidebar({ session }: { session: UserSession }) {
   )
 
   return (
-    <aside className="w-64 flex flex-col border-r border-white/5 bg-[#0a0a0e]">
-      <div className="p-5 border-b border-white/5">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-lg"
+    <aside className={`flex flex-col border-r border-white/5 bg-[#0a0a0e] transition-all duration-300 ${collapsed ? 'w-16' : 'w-64'}`}>
+      {/* Header */}
+      <div className="p-3 border-b border-white/5 flex items-center justify-between gap-2">
+        {!collapsed && (
+          <img src="/logo.png" alt="Invollve" className="h-7 object-contain" />
+        )}
+        {collapsed && (
+          <div className="w-8 h-8 mx-auto rounded-lg flex items-center justify-center"
             style={{ background: 'linear-gradient(135deg, #6c3de8, #ec4899)' }}>
-            I
+            <span className="text-white text-xs font-black">I</span>
           </div>
-          <div>
-            <p className="font-black text-white text-sm tracking-wide">INVOLLVE</p>
-            <p className="text-xs text-zinc-500">Gestão de Agência</p>
-          </div>
-        </div>
+        )}
+        <button
+          onClick={() => setCollapsed(c => !c)}
+          className="ml-auto flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-zinc-500 hover:text-white hover:bg-white/10 transition-all"
+          title={collapsed ? 'Expandir menu' : 'Recolher menu'}
+        >
+          {collapsed ? (
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          )}
+        </button>
       </div>
 
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+      {/* Nav */}
+      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
         {visibleItems.map(item => {
           const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
           return (
-            <Link key={item.href} href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${active
+            <Link key={item.href} href={item.href} title={collapsed ? item.label : undefined}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${collapsed ? 'justify-center' : ''} ${active
                 ? 'bg-purple-600/20 text-purple-300 font-medium'
                 : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}>
-              <span>{item.icon}</span>
-              <span>{item.label}</span>
+              <span className="text-base flex-shrink-0">{item.icon}</span>
+              {!collapsed && <span>{item.label}</span>}
             </Link>
           )
         })}
       </nav>
 
-      <div className="p-3 border-t border-white/5">
-        <div className="px-3 py-2 mb-2">
-          <p className="text-sm font-medium text-white truncate">{session.name}</p>
-          <p className="text-xs text-zinc-500 truncate">{session.email}</p>
-        </div>
-        <button onClick={logout}
-          className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-zinc-400 hover:bg-white/5 hover:text-white transition-all">
-          <span>🚪</span>
-          <span>Sair</span>
+      {/* Footer */}
+      <div className="p-2 border-t border-white/5">
+        {!collapsed && (
+          <div className="px-3 py-2 mb-1">
+            <p className="text-sm font-medium text-white truncate">{session.name}</p>
+            <p className="text-xs text-zinc-500 truncate">{session.email}</p>
+          </div>
+        )}
+        <button onClick={logout} title={collapsed ? 'Sair' : undefined}
+          className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-zinc-400 hover:bg-white/5 hover:text-white transition-all ${collapsed ? 'justify-center' : ''}`}>
+          <span className="flex-shrink-0">🚪</span>
+          {!collapsed && <span>Sair</span>}
         </button>
       </div>
     </aside>

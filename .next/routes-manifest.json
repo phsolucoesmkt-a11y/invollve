@@ -138,6 +138,12 @@
       "namedRegex": "^/api/tasks(?:/)?$"
     },
     {
+      "page": "/api/upload/avatar",
+      "regex": "^/api/upload/avatar(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/upload/avatar(?:/)?$"
+    },
+    {
       "page": "/api/users",
       "regex": "^/api/users(?:/)?$",
       "routeKeys": {},

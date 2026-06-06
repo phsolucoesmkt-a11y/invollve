@@ -17,6 +17,7 @@
   "/api/rh/route": "/api/rh",
   "/api/seed/route": "/api/seed",
   "/api/tasks/route": "/api/tasks",
+  "/api/upload/avatar/route": "/api/upload/avatar",
   "/api/users/list/route": "/api/users/list",
   "/api/users/route": "/api/users",
   "/dashboard/agentes/page": "/dashboard/agentes",

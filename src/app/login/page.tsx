@@ -32,11 +32,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-[#0f0f13]">
       <div className="w-full max-w-md">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4"
-            style={{ background: 'linear-gradient(135deg, #6c3de8, #ec4899)' }}>
-            <span className="text-white text-2xl font-black">I</span>
-          </div>
-          <h1 className="text-3xl font-black text-white tracking-tight">Invollve</h1>
+          <img src="/logo.png" alt="Invollve" className="h-12 mx-auto mb-4" />
           <p className="text-zinc-400 mt-1 text-sm">Gestão de Agência</p>
         </div>
 

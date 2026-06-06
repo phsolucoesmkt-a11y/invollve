@@ -17,6 +17,7 @@
   "/api/rh/route": "app/api/rh/route.js",
   "/api/seed/route": "app/api/seed/route.js",
   "/api/tasks/route": "app/api/tasks/route.js",
+  "/api/upload/avatar/route": "app/api/upload/avatar/route.js",
   "/api/users/list/route": "app/api/users/list/route.js",
   "/api/users/route": "app/api/users/route.js",
   "/dashboard/agentes/page": "app/dashboard/agentes/page.js",

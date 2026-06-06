@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const ROLES: Record<string, string> = {
   socio: 'Sócio', gestor_trafego: 'Gestor de Tráfego', social_media: 'Social Media',
@@ -13,6 +13,8 @@ export default function PerfilPage() {
   const [saved, setSaved] = useState(false)
   const [pwError, setPwError] = useState('')
   const [pwSaved, setPwSaved] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function load() {
     const data = await fetch('/api/profile').then(r => r.json())
@@ -50,6 +52,18 @@ export default function PerfilPage() {
     setTimeout(() => setPwSaved(false), 3000)
   }
 
+  async function uploadAvatar(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch('/api/upload/avatar', { method: 'POST', body: fd })
+    const data = await res.json()
+    setUploading(false)
+    if (data.url) setForm(f => ({ ...f, avatar_url: data.url }))
+  }
+
   function initials(name: string) {
     return name?.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() || '?'
   }
@@ -62,10 +76,16 @@ export default function PerfilPage() {
 
       <div className="glass rounded-2xl p-6 mb-4">
         <div className="flex items-center gap-4 mb-6">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-xl font-black overflow-hidden"
-            style={{ background: 'linear-gradient(135deg, #6c3de8, #ec4899)' }}>
+          <button type="button" onClick={() => fileInputRef.current?.click()}
+            className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-xl font-black overflow-hidden relative group cursor-pointer"
+            style={{ background: 'linear-gradient(135deg, #6c3de8, #ec4899)' }}
+            title="Clique para trocar a foto">
             {form.avatar_url ? <img src={form.avatar_url} className="w-full h-full object-cover" alt="" /> : initials(form.name)}
-          </div>
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs">
+              {uploading ? '...' : '📷'}
+            </div>
+          </button>
+          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" className="hidden" onChange={uploadAvatar} />
           <div>
             <p className="font-bold text-white">{profile.name}</p>
             <p className="text-sm text-zinc-400">{profile.email}</p>
@@ -87,8 +107,11 @@ export default function PerfilPage() {
             <input type="date" value={form.birthday} onChange={e => setForm(f => ({ ...f, birthday: e.target.value }))} className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm" />
           </div>
           <div>
-            <label className="text-xs text-zinc-400 mb-1 block">URL da Foto de Perfil</label>
-            <input value={form.avatar_url} onChange={e => setForm(f => ({ ...f, avatar_url: e.target.value }))} className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm" placeholder="https://..." />
+            <label className="text-xs text-zinc-400 mb-1 block">Foto de Perfil</label>
+            <button type="button" onClick={() => fileInputRef.current?.click()}
+              className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-zinc-400 text-sm text-left hover:bg-white/10 transition">
+              {uploading ? 'Enviando...' : form.avatar_url ? '✅ Foto carregada — clique para trocar' : '📷 Clique para fazer upload (JPEG ou PNG)'}
+            </button>
           </div>
         </div>
 
