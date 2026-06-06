@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     'INSERT INTO financial_entries (type, description, amount, category, status, due_date, paid_date, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [type, description, amount, category, status || 'pendente', due_date || null, paid_date || null, client_id || null]
   )
-  return NextResponse.json({ id: result.lastInsertRowid })
+  return NextResponse.json({ id: Number(result.lastInsertRowid) })
 }
 
 export async function PUT(req: NextRequest) {

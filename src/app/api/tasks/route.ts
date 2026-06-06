@@ -7,7 +7,7 @@ export async function GET() {
   const session = await getSession()
   if (!session || session.role === 'cliente') return NextResponse.json({ error: 'Não autorizado' }, { status: 403 })
   const tasks = await db.all(`
-    SELECT t.*, u.name as assigned_name, c.name as client_name
+    SELECT t.*, u.name as assigned_name, u.avatar_url as assigned_avatar, c.name as client_name
     FROM tasks t
     LEFT JOIN users u ON t.assigned_to = u.id
     LEFT JOIN clients c ON t.client_id = c.id
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ id: result.lastInsertRowid })
+  return NextResponse.json({ id: Number(result.lastInsertRowid) })
 }
 
 export async function PUT(req: NextRequest) {
