@@ -147,17 +147,17 @@ export async function GET(req: NextRequest) {
     totalVendas += valor
     consultorMap[consultor] = (consultorMap[consultor] || 0) + valor
 
-    const isInvollve = INVOLLVE_ORIGINS.some(o => origem === o || origem.startsWith(o))
+    const isInvollve = INVOLLVE_ORIGINS.includes(origem)
     if (isInvollve) totalInvollve += valor
 
-    const isWhatsapp = WHATSAPP_ORIGINS.some(o => origem === o || origem.startsWith(o))
+    const isWhatsapp = WHATSAPP_ORIGINS.includes(origem)
     if (isWhatsapp) {
       totalWhatsapp += valor
       countWhatsapp++
       if (valor > 0) countVendasWhatsappSales++
     }
 
-    const isSite = SITE_ORIGINS.some(o => origem === o || origem.startsWith(o))
+    const isSite = SITE_ORIGINS.includes(origem)
     if (isSite) {
       totalSite += valor
       countSite++
