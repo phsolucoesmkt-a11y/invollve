@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
     const valor = parseBRL(r[3])
     const origem = (r[4] || '').toLowerCase().trim()
     const consultor = (r[5] || '').trim()
-    if (valor === 0 && !r[3]) continue
+    if (valor <= 0) continue
 
     totalVendas += valor
     consultorMap[consultor] = (consultorMap[consultor] || 0) + valor
@@ -178,6 +178,7 @@ export async function GET(req: NextRequest) {
       const dateStr = parseDate(r[0] || '')
       if (!inPeriod(dateStr, from, to)) continue
       const valor = parseBRL(r[2])
+      if (valor <= 0) continue
       storeTotal += valor
       totalLojas += valor
     }
