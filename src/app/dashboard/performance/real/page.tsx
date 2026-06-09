@@ -56,7 +56,7 @@ function RoasCard({ label, value, loading }: any) {
 function FunnelBar({ label, value, sub, color, pct = 100 }: any) {
   return (
     <div className="relative mb-2" style={{ width: `${Math.max(pct, 40)}%`, minWidth: 180 }}>
-      <div className={`rounded-xl p-3 ${color}`}>
+      <div className={`rounded-xl p-3 text-center ${color}`}>
         <p className="text-xs text-white/70">{label}</p>
         <p className="text-white font-bold text-lg">{value}</p>
         {sub && <p className="text-xs text-white/60">{sub}</p>}
@@ -125,7 +125,8 @@ export default function PerformanceRealPage() {
           color="text-green-400" loading={loading} />
         <KpiCard label="Influenciado pela Invollve" value={fmtBRL(data?.influenciadoInvollve || 0)}
           color="text-purple-400" loading={loading} />
-        <KpiCard label="Investimento Meta" value={fmtBRL(data?.investimentoMeta || 0)}
+        <KpiCard label="Investimento Meta Total" value={fmtBRL(data?.investimentoMeta || 0)}
+          sub={data ? `Contact: ${fmtBRL(data.investimentoMetaContact || 0)} | Lojas: ${fmtBRL(data.investimentoMetaLojas || 0)}` : undefined}
           color="text-blue-400" loading={loading} />
         <KpiCard label="Investimento Google Ads" value="—"
           sub="Em breve" color="text-zinc-500" loading={false} />

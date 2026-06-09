@@ -35,6 +35,20 @@ const SITE_ORIGINS = [
   'site(link)',
 ]
 
+const META_TOKEN = process.env.META_ACCESS_TOKEN
+const REAL_LOJAS_ACCOUNT = '686437226358753'
+
+async function fetchMetaSpend(accountId: string, from: string, to: string): Promise<number> {
+  if (!META_TOKEN) return 0
+  const url = `https://graph.facebook.com/v22.0/act_${accountId}/insights?fields=spend&time_range={"since":"${from}","until":"${to}"}&access_token=${META_TOKEN}`
+  try {
+    const res = await fetch(url, { next: { revalidate: 300 } })
+    if (!res.ok) return 0
+    const json = await res.json()
+    return parseFloat(json.data?.[0]?.spend || '0')
+  } catch { return 0 }
+}
+
 function csvUrl(id: string, gid: string) {
   return `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`
 }
@@ -110,9 +124,10 @@ export async function GET(req: NextRequest) {
   }
 
   // Fetch all sources in parallel
-  const [advRows, vendasRows, ...lojasRowsArr] = await Promise.all([
+  const [advRows, vendasRows, investMetaLojas, ...lojasRowsArr] = await Promise.all([
     fetchCSV(ADVERONIX_ID, ADVERONIX_GID),
     fetchCSV(VENDAS_ID, VENDAS_GID),
+    fetchMetaSpend(REAL_LOJAS_ACCOUNT, from, to),
     ...LOJAS_TABS.map(t => fetchCSV(LOJAS_ID, t.gid)),
   ])
 
@@ -192,11 +207,13 @@ export async function GET(req: NextRequest) {
   }
 
   // ── CALCULATED METRICS ────────────────────────────────────────────────────
+  const totalInvestMetaContact = totalInvestMeta
+  const totalInvestMetaTotal = totalInvestMetaContact + (investMetaLojas as number)
   const resultadoGeral = totalInvollve + totalLojas
-  const roasGeral = totalInvestMeta > 0 ? resultadoGeral / totalInvestMeta : 0
-  const roasContact = totalInvestMeta > 0 ? totalInvollve / totalInvestMeta : 0
-  const roasLojas = totalInvestMeta > 0 ? totalLojas / totalInvestMeta : 0
-  const cpl = totalLeads > 0 ? totalInvestMeta / totalLeads : 0
+  const roasGeral = totalInvestMetaTotal > 0 ? resultadoGeral / totalInvestMetaTotal : 0
+  const roasContact = totalInvestMetaContact > 0 ? totalInvollve / totalInvestMetaContact : 0
+  const roasLojas = (investMetaLojas as number) > 0 ? totalLojas / (investMetaLojas as number) : 0
+  const cpl = totalLeads > 0 ? totalInvestMetaContact / totalLeads : 0
   const ticketMedioWhatsapp = countWhatsapp > 0 ? totalWhatsapp / countWhatsapp : 0
   const ticketMedioSite = countSite > 0 ? totalSite / countSite : 0
   const taxaConversaoWhatsapp = totalLeads > 0 ? countVendasWhatsappSales / totalLeads : 0
@@ -207,7 +224,9 @@ export async function GET(req: NextRequest) {
     // Top KPIs
     geralSetorContact: totalVendas,
     influenciadoInvollve: totalInvollve,
-    investimentoMeta: totalInvestMeta,
+    investimentoMeta: totalInvestMetaTotal,
+    investimentoMetaContact: totalInvestMetaContact,
+    investimentoMetaLojas: investMetaLojas,
     leadsGerados: totalLeads,
     custoporLead: cpl,
     // Middle
