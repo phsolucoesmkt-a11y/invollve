@@ -70,15 +70,20 @@ export default function PerformanceRealPage() {
   const [year, setYear] = useState(now.getFullYear())
   const [monthIdx, setMonthIdx] = useState(now.getMonth()) // 0-based
   const [data, setData] = useState<any>(null)
+  const [igData, setIgData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
     const month = `${year}-${String(monthIdx + 1).padStart(2, '0')}`
-    const res = await fetch(`/api/performance/real?month=${month}`)
-    const json = await res.json()
+    const [res, igRes] = await Promise.all([
+      fetch(`/api/performance/real?month=${month}`),
+      fetch(`/api/performance/instagram?month=${month}`),
+    ])
+    const [json, igJson] = await Promise.all([res.json(), igRes.json()])
     setData(json)
+    if (!igJson.needs_token && !igJson.error) setIgData(igJson)
     setLoading(false)
     setLastUpdate(new Date().toLocaleString('pt-BR'))
   }, [year, monthIdx])
@@ -247,6 +252,78 @@ export default function PerformanceRealPage() {
           </div>
         </div>
       )}
+
+      {/* Instagram Section */}
+      <div className="mt-6">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-2xl">📸</span>
+          <h2 className="text-lg font-bold text-white">Instagram @realequipamentos</h2>
+        </div>
+
+        {igData ? (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+              <KpiCard label="Visualizações" value={fmtNum(igData.impressions)} color="text-pink-400" loading={loading} />
+              <KpiCard label="Alcance" value={fmtNum(igData.reach)} color="text-purple-400" loading={loading} />
+              <KpiCard label="Visitas ao Perfil" value={fmtNum(igData.profileViews)} color="text-blue-400" loading={loading} />
+              <KpiCard label="Cliques no Link" value={fmtNum(igData.websiteClicks)} color="text-green-400" loading={loading} />
+              <KpiCard label="Seguidores" value={fmtNum(igData.followers)} color="text-yellow-400" loading={loading} />
+            </div>
+
+            {/* Insights & Ações */}
+            <div className="glass rounded-2xl p-5">
+              <h3 className="font-bold text-white mb-4 text-sm">💡 Análise & Plano de Ação</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-semibold text-pink-400 mb-2">DIAGNÓSTICO</p>
+                  <ul className="space-y-2 text-sm text-zinc-300">
+                    {igData.reach > 0 && igData.impressions > 0 && (
+                      <li>• Frequência média: <span className="text-white font-bold">{(igData.impressions / igData.reach).toFixed(1)}x</span> por pessoa alcançada
+                        {igData.impressions / igData.reach < 1.5
+                          ? ' — alcance amplo, baixa recorrência'
+                          : ' — boa recorrência de visualização'}
+                      </li>
+                    )}
+                    {igData.profileViews > 0 && igData.reach > 0 && (
+                      <li>• Taxa de visita ao perfil: <span className="text-white font-bold">{((igData.profileViews / igData.reach) * 100).toFixed(1)}%</span> do alcance
+                        {(igData.profileViews / igData.reach) < 0.03
+                          ? ' — conteúdo não está gerando curiosidade suficiente'
+                          : ' — bom engajamento com o perfil'}
+                      </li>
+                    )}
+                    {igData.websiteClicks > 0 && igData.profileViews > 0 && (
+                      <li>• Conversão perfil → link: <span className="text-white font-bold">{((igData.websiteClicks / igData.profileViews) * 100).toFixed(1)}%</span>
+                        {(igData.websiteClicks / igData.profileViews) < 0.1
+                          ? ' — bio/link não está convertendo bem'
+                          : ' — boa conversão para o site'}
+                      </li>
+                    )}
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-green-400 mb-2">AÇÕES RECOMENDADAS</p>
+                  <ul className="space-y-2 text-sm text-zinc-300">
+                    {igData.websiteClicks < 100 && (
+                      <li>• Adicionar CTA claro nos Reels e Stories para clicar no link da bio</li>
+                    )}
+                    {igData.reach > 0 && igData.followers > 0 && igData.reach / igData.followers < 3 && (
+                      <li>• Aumentar frequência de publicações — alcance baixo em relação à base de seguidores</li>
+                    )}
+                    {igData.profileViews > igData.websiteClicks * 5 && (
+                      <li>• Otimizar bio com oferta clara e link direto para produto/WhatsApp</li>
+                    )}
+                    <li>• Conectar Google Analytics para rastrear visitantes vindos do Instagram até a venda</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="glass rounded-2xl p-6 text-center">
+            <p className="text-zinc-400 text-sm">Configure META_ACCESS_TOKEN no Vercel para exibir dados do Instagram.</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
