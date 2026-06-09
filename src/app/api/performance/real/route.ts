@@ -17,21 +17,21 @@ const LOJAS_TABS = [
 
 // Origins counted as "influenciado pela Invollve" (lowercase comparison)
 const INVOLLVE_ORIGINS = [
-  'whatsapp', 'whatsapp(base)',
-  'site(e-commerce)', 'site(e-commerce) base', 'site(e-commerce) incentivo',
-  'site (e-commerce) incentivo', 'site(e-commerce) recorrência',
-  'site(e-commerce) recorrencia', 'site (e-commerce) recorrência',
-  'site (e-commerce) recorrencia', 'site (e-commerce) recuperação',
+  'facebook', 'instagram', 'whatsapp',
+  'site(e-commerce)', 'site(e-commerce) incentivo', 'site (e-commerce) incentivo',
+  'site(e-commerce) recorrência', 'site(e-commerce) recorrencia',
+  'site (e-commerce) recorrência', 'site (e-commerce) recorrencia',
   'site(e-commerce) recuperação', 'site(e-commerce) recuperacao',
-  'instagram', 'facebook', 'site(link)',
+  'site (e-commerce) recuperação', 'site (e-commerce) recuperacao',
+  'site(link)',
 ]
-const WHATSAPP_ORIGINS = ['whatsapp', 'whatsapp(base)']
+const WHATSAPP_ORIGINS = ['whatsapp']
 const SITE_ORIGINS = [
-  'site(e-commerce)', 'site(e-commerce) base', 'site(e-commerce) incentivo',
-  'site (e-commerce) incentivo', 'site(e-commerce) recorrência',
-  'site(e-commerce) recorrencia', 'site (e-commerce) recorrência',
-  'site (e-commerce) recorrencia', 'site (e-commerce) recuperação',
+  'site(e-commerce)', 'site(e-commerce) incentivo', 'site (e-commerce) incentivo',
+  'site(e-commerce) recorrência', 'site(e-commerce) recorrencia',
+  'site (e-commerce) recorrência', 'site (e-commerce) recorrencia',
   'site(e-commerce) recuperação', 'site(e-commerce) recuperacao',
+  'site (e-commerce) recuperação', 'site (e-commerce) recuperacao',
   'site(link)',
 ]
 
