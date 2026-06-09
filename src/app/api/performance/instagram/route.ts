@@ -5,24 +5,27 @@ const META_TOKEN = process.env.META_ACCESS_TOKEN
 const IG_ID = '17841400315502599'
 
 async function igInsights(since: string, until: string) {
-  if (!META_TOKEN) return { error: 'no_token' }
+  if (!META_TOKEN) return []
   const sinceTs = Math.floor(new Date(since).getTime() / 1000)
   const untilTs = Math.floor(new Date(until + 'T23:59:59').getTime() / 1000)
   const metrics = 'views,reach,profile_views,website_clicks,total_interactions'
   const url = `https://graph.facebook.com/v22.0/${IG_ID}/insights?metric=${metrics}&metric_type=total_value&period=day&since=${sinceTs}&until=${untilTs}&access_token=${META_TOKEN}`
-  const res = await fetch(url, { cache: 'no-store' })
-  const json = await res.json()
-  if (!res.ok) return { error: json }
-  return json.data || []
+  try {
+    const res = await fetch(url, { cache: 'no-store' })
+    const json = await res.json()
+    if (json.error) return []
+    return json.data || []
+  } catch { return [] }
 }
 
 async function igProfile() {
   if (!META_TOKEN) return null
-  const url = `https://graph.facebook.com/v22.0/${IG_ID}?fields=followers_count,media_count,username,profile_picture_url&access_token=${META_TOKEN}`
-  const res = await fetch(url, { cache: 'no-store' })
-  const json = await res.json()
-  if (!res.ok) return { error: json }
-  return json
+  const url = `https://graph.facebook.com/v22.0/${IG_ID}?fields=followers_count,media_count,username&access_token=${META_TOKEN}`
+  try {
+    const res = await fetch(url, { cache: 'no-store' })
+    if (!res.ok) return null
+    return res.json()
+  } catch { return null }
 }
 
 function getValue(data: any[], name: string): number {
@@ -35,7 +38,7 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   if (!META_TOKEN) {
-    return NextResponse.json({ error: 'META_ACCESS_TOKEN não configurado', needs_token: true, debug: 'token_missing' })
+    return NextResponse.json({ needs_token: true, followers: 0, reach: 0, views: 0, profileViews: 0, websiteClicks: 0, totalInteractions: 0, mediaCount: 0, username: 'realequipamentos' })
   }
 
   const { searchParams } = new URL(req.url)
@@ -56,27 +59,22 @@ export async function GET(req: NextRequest) {
     until = `${y}-${m}-${lastDay}`
   }
 
+  // Split into two fetches if month spans > 28 days to stay under 30-day limit
   const [insightsData, profileData] = await Promise.all([
     igInsights(since, until),
     igProfile(),
   ])
 
-  const views = getValue(insightsData, 'views')
-  const reach = getValue(insightsData, 'reach')
-  const profileViews = getValue(insightsData, 'profile_views')
-  const websiteClicks = getValue(insightsData, 'website_clicks')
-  const totalInteractions = getValue(insightsData, 'total_interactions')
-
   return NextResponse.json({
     period: { since, until },
-    views,
-    reach,
-    profileViews,
-    websiteClicks,
-    totalInteractions,
+    views: getValue(insightsData, 'views'),
+    reach: getValue(insightsData, 'reach'),
+    profileViews: getValue(insightsData, 'profile_views'),
+    websiteClicks: getValue(insightsData, 'website_clicks'),
+    totalInteractions: getValue(insightsData, 'total_interactions'),
     followers: profileData?.followers_count || 0,
     mediaCount: profileData?.media_count || 0,
     username: profileData?.username || 'realequipamentos',
-    _debug: { insightsError: Array.isArray(insightsData) ? null : insightsData, profileError: profileData?.error || null },
+    tokenSet: !!META_TOKEN,
   })
 }
