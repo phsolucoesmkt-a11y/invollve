@@ -17,16 +17,22 @@ const LOJAS_TABS = [
 
 // Origins counted as "influenciado pela Invollve" (lowercase comparison)
 const INVOLLVE_ORIGINS = [
-  'whatsapp', 'whatsapp(base)', 'whatsapp base',
+  'whatsapp', 'whatsapp(base)',
   'site(e-commerce)', 'site(e-commerce) base', 'site(e-commerce) incentivo',
   'site (e-commerce) incentivo', 'site(e-commerce) recorrência',
-  'site(e-commerce) recorrencia', 'instagram', 'facebook', 'site link',
+  'site(e-commerce) recorrencia', 'site (e-commerce) recorrência',
+  'site (e-commerce) recorrencia', 'site (e-commerce) recuperação',
+  'site(e-commerce) recuperação', 'site(e-commerce) recuperacao',
+  'instagram', 'facebook', 'site(link)',
 ]
-const WHATSAPP_ORIGINS = ['whatsapp', 'whatsapp(base)', 'whatsapp base']
+const WHATSAPP_ORIGINS = ['whatsapp', 'whatsapp(base)']
 const SITE_ORIGINS = [
   'site(e-commerce)', 'site(e-commerce) base', 'site(e-commerce) incentivo',
   'site (e-commerce) incentivo', 'site(e-commerce) recorrência',
-  'site(e-commerce) recorrencia', 'site link',
+  'site(e-commerce) recorrencia', 'site (e-commerce) recorrência',
+  'site (e-commerce) recorrencia', 'site (e-commerce) recuperação',
+  'site(e-commerce) recuperação', 'site(e-commerce) recuperacao',
+  'site(link)',
 ]
 
 function csvUrl(id: string, gid: string) {
