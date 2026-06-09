@@ -10,7 +10,7 @@ async function igInsights(since: string, until: string) {
   const untilTs = Math.floor(new Date(until + 'T23:59:59').getTime() / 1000)
   const metrics = 'views,reach,profile_views,website_clicks,total_interactions'
   const url = `https://graph.facebook.com/v22.0/${IG_ID}/insights?metric=${metrics}&metric_type=total_value&period=day&since=${sinceTs}&until=${untilTs}&access_token=${META_TOKEN}`
-  const res = await fetch(url, { next: { revalidate: 300 } })
+  const res = await fetch(url, { cache: 'no-store' })
   if (!res.ok) return null
   const json = await res.json()
   return json.data || []
@@ -19,7 +19,7 @@ async function igInsights(since: string, until: string) {
 async function igProfile() {
   if (!META_TOKEN) return null
   const url = `https://graph.facebook.com/v22.0/${IG_ID}?fields=followers_count,media_count,username,profile_picture_url&access_token=${META_TOKEN}`
-  const res = await fetch(url, { next: { revalidate: 300 } })
+  const res = await fetch(url, { cache: 'no-store' })
   if (!res.ok) return null
   return res.json()
 }
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   if (!META_TOKEN) {
-    return NextResponse.json({ error: 'META_ACCESS_TOKEN não configurado', needs_token: true })
+    return NextResponse.json({ error: 'META_ACCESS_TOKEN não configurado', needs_token: true, debug: 'token_missing' })
   }
 
   const { searchParams } = new URL(req.url)
