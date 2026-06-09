@@ -4,6 +4,7 @@ import { getSession } from '@/lib/session'
 // Sheet IDs and GIDs
 const ADVERONIX_ID = '125qB1LnutVH10WqsWMUlKbFS-dyhPZoH_iG6RlD4Rgg'
 const ADVERONIX_GID = '702921584'
+const ADVERONIX_LOJAS_GID = '30276283'
 const VENDAS_ID = '1wSMYg2sFfFLVAYTyuXitxG28d-BC49WTpOlAvcAx_HM'
 const VENDAS_GID = '1698326152'
 const LOJAS_ID = '1KJc5D3YcEGmmlEp-xo4ORnz2kPSf7zWIbeBGT5Yh5J8'
@@ -124,16 +125,14 @@ export async function GET(req: NextRequest) {
   }
 
   // Fetch all sources in parallel
-  const [advRows, vendasRows, investMetaLojas, ...lojasRowsArr] = await Promise.all([
+  const [advRows, advLojasRows, vendasRows, ...lojasRowsArr] = await Promise.all([
     fetchCSV(ADVERONIX_ID, ADVERONIX_GID),
+    fetchCSV(ADVERONIX_ID, ADVERONIX_LOJAS_GID),
     fetchCSV(VENDAS_ID, VENDAS_GID),
-    fetchMetaSpend(REAL_LOJAS_ACCOUNT, from, to),
     ...LOJAS_TABS.map(t => fetchCSV(LOJAS_ID, t.gid)),
   ])
 
-  // ── ADVERONIX ──────────────────────────────────────────────────────────────
-  // Headers: Campaign Name, Ad Set Name, Ad Name, Link Clicks,
-  //          Messaging Conversations Started, Reach, Amount Spent, Impressions, CPM, Day
+  // ── ADVERONIX (Contact) ────────────────────────────────────────────────────
   let totalInvestMeta = 0, totalLeads = 0, totalReach = 0,
     totalImpressions = 0, totalClicks = 0
 
@@ -146,6 +145,16 @@ export async function GET(req: NextRequest) {
     totalReach += parseFloat(r[5]) || 0
     totalInvestMeta += parseBRL(r[6])
     totalImpressions += parseFloat(r[7]) || 0
+  }
+
+  // ── ADVERONIX (Lojas) ──────────────────────────────────────────────────────
+  let totalInvestMetaLojasSheet = 0
+
+  for (let i = 1; i < advLojasRows.length; i++) {
+    const r = advLojasRows[i]
+    const day = parseDate(r[9] || '')
+    if (!inPeriod(day, from, to)) continue
+    totalInvestMetaLojasSheet += parseBRL(r[6])
   }
 
   // ── VENDAS (Contact Center) ────────────────────────────────────────────────
@@ -208,11 +217,12 @@ export async function GET(req: NextRequest) {
 
   // ── CALCULATED METRICS ────────────────────────────────────────────────────
   const totalInvestMetaContact = totalInvestMeta
-  const totalInvestMetaTotal = totalInvestMetaContact + (investMetaLojas as number)
+  const totalInvestMetaLojas = totalInvestMetaLojasSheet
+  const totalInvestMetaTotal = totalInvestMetaContact + totalInvestMetaLojas
   const resultadoGeral = totalInvollve + totalLojas
   const roasGeral = totalInvestMetaTotal > 0 ? resultadoGeral / totalInvestMetaTotal : 0
   const roasContact = totalInvestMetaContact > 0 ? totalInvollve / totalInvestMetaContact : 0
-  const roasLojas = (investMetaLojas as number) > 0 ? totalLojas / (investMetaLojas as number) : 0
+  const roasLojas = totalInvestMetaLojas > 0 ? totalLojas / totalInvestMetaLojas : 0
   const cpl = totalLeads > 0 ? totalInvestMetaContact / totalLeads : 0
   const ticketMedioWhatsapp = countWhatsapp > 0 ? totalWhatsapp / countWhatsapp : 0
   const ticketMedioSite = countSite > 0 ? totalSite / countSite : 0
@@ -226,7 +236,7 @@ export async function GET(req: NextRequest) {
     influenciadoInvollve: totalInvollve,
     investimentoMeta: totalInvestMetaTotal,
     investimentoMetaContact: totalInvestMetaContact,
-    investimentoMetaLojas: investMetaLojas,
+    investimentoMetaLojas: totalInvestMetaLojas,
     leadsGerados: totalLeads,
     custoporLead: cpl,
     // Middle
