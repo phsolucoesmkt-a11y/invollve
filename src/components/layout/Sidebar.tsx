@@ -15,6 +15,7 @@ const navItems = [
   { href: '/dashboard/drive', label: 'Drive', icon: '📁', module: 'drive' },
   { href: '/dashboard/reunioes', label: 'Reuniões', icon: '📅', module: 'reunioes' },
   { href: '/dashboard/processos', label: 'Processos', icon: '⚙️', module: 'processos' },
+  { href: '/dashboard/joao', label: 'João (IA)', icon: '🧑‍💼', module: null },
   { href: '/dashboard/agentes', label: 'Agentes de IA', icon: '🤖', module: 'agentes' },
   { href: '/dashboard/chat', label: 'Chat', icon: '💬', module: 'tarefas' },
   { href: '/dashboard/usuarios', label: 'Usuários', icon: '🔧', module: 'usuarios' },
