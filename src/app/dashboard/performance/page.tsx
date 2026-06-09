@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 
 const DATE_PRESETS = [
   { value: 'today', label: 'Hoje' },
@@ -145,9 +146,28 @@ export default function PerformancePage() {
 
   return (
     <div>
+      {/* Dashboards dedicados */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-black text-white mb-4">📈 Performance</h1>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+          <Link href="/dashboard/performance/real"
+            className="glass rounded-2xl p-5 border border-purple-500/30 hover:border-purple-500/60 transition group cursor-pointer">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-3xl">🏭</span>
+              <div>
+                <p className="font-bold text-white group-hover:text-purple-300 transition">Real Equipamentos</p>
+                <p className="text-xs text-zinc-400">Dashboard completo — Meta + Vendas + Lojas</p>
+              </div>
+            </div>
+            <span className="text-xs text-purple-400 font-semibold">Abrir dashboard →</span>
+          </Link>
+        </div>
+        <p className="text-xs text-zinc-500 mb-4">— Ou visualize dados Meta Ads por conta abaixo —</p>
+      </div>
+
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-black text-white">📈 Performance</h1>
+          <h1 className="text-lg font-bold text-zinc-300">Meta Ads — Visão Geral</h1>
           <select value={selectedClient?.id || ''} onChange={e => setSelectedClient(clients.find(c => c.id === Number(e.target.value)))}
             className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm">
             {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
