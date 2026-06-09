@@ -263,9 +263,9 @@ export default function PerformanceRealPage() {
         {igData ? (
           <>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-              <KpiCard label="Visualizações" value={fmtNum(igData.impressions)} color="text-pink-400" loading={loading} />
+              <KpiCard label="Visualizações" value={fmtNum(igData.views)} color="text-pink-400" loading={loading} />
               <KpiCard label="Alcance" value={fmtNum(igData.reach)} color="text-purple-400" loading={loading} />
-              <KpiCard label="Visitas ao Perfil" value={fmtNum(igData.profileViews)} color="text-blue-400" loading={loading} />
+              <KpiCard label="Interações" value={fmtNum(igData.totalInteractions)} color="text-blue-400" loading={loading} />
               <KpiCard label="Cliques no Link" value={fmtNum(igData.websiteClicks)} color="text-green-400" loading={loading} />
               <KpiCard label="Seguidores" value={fmtNum(igData.followers)} color="text-yellow-400" loading={loading} />
             </div>
@@ -277,9 +277,9 @@ export default function PerformanceRealPage() {
                 <div>
                   <p className="text-xs font-semibold text-pink-400 mb-2">DIAGNÓSTICO</p>
                   <ul className="space-y-2 text-sm text-zinc-300">
-                    {igData.reach > 0 && igData.impressions > 0 && (
-                      <li>• Frequência média: <span className="text-white font-bold">{(igData.impressions / igData.reach).toFixed(1)}x</span> por pessoa alcançada
-                        {igData.impressions / igData.reach < 1.5
+                    {igData.reach > 0 && igData.views > 0 && (
+                      <li>• Frequência média: <span className="text-white font-bold">{(igData.views / igData.reach).toFixed(1)}x</span> por pessoa alcançada
+                        {igData.views / igData.reach < 1.5
                           ? ' — alcance amplo, baixa recorrência'
                           : ' — boa recorrência de visualização'}
                       </li>
