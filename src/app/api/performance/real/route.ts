@@ -56,7 +56,11 @@ async function fetchCSV(id: string, gid: string): Promise<string[][]> {
 
 function parseBRL(v: string): number {
   if (!v) return 0
-  return parseFloat(v.replace(/[^0-9,.-]/g, '').replace(',', '.')) || 0
+  // Brazilian format: R$ 3.798,00 → remove R$, spaces, dots (thousands sep), replace comma with dot
+  const cleaned = v.replace(/[^0-9,\-]/g, '').replace(',', '.')
+  // If there were dots as thousands separators they're already removed above
+  // But we need to handle: "3798.00" (already converted) vs original with dots
+  return parseFloat(cleaned) || 0
 }
 
 function parseDate(v: string): string {
