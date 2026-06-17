@@ -1,7 +1,6 @@
-// In-memory presence + chat hub for the virtual office.
-// Shared across route handlers via globalThis so it survives HMR / module reloads
-// and is a true singleton within the Node server process. Fine for a small team
-// (single process); swap for Redis pub/sub if it ever needs to scale horizontally.
+// In-memory presence + chat + WebRTC-signaling hub for the virtual office.
+// Singleton via globalThis so it survives HMR and is shared across route handlers
+// within the Node server process. Fine for a small team (single process).
 
 export type OfficeStatus = 'online' | 'ocupado' | 'reuniao'
 
@@ -12,57 +11,67 @@ export interface OfficePlayer {
   x: number
   y: number
   status: OfficeStatus
+  hand: boolean
   t: number
 }
 
 export interface ChatMsg {
-  id: number     // sender id
+  id: number
   name: string
-  x: number      // sender position at send time (for proximity)
+  x: number
   y: number
   text: string
   t: number
 }
 
-type Listener = (frame: string) => void // receives a ready-to-write SSE frame
+type Entry = { userId: number; fn: (frame: string) => void }
 
 interface Hub {
-  players: Map<number, OfficePlayer>
+  players: Map<number, Omit<OfficePlayer, 'hand'>>
+  hands: Set<number>
   chat: ChatMsg[]
-  listeners: Set<Listener>
+  listeners: Set<Entry>
 }
 
 const STALE_MS = 12000
 const CHAT_MAX = 40
 
 const g = globalThis as unknown as { __officeHub?: Hub }
-const hub: Hub = g.__officeHub ?? (g.__officeHub = { players: new Map(), chat: [], listeners: new Set() })
-// rehydrate fields that may be missing if the singleton predates a code change (HMR)
+const hub: Hub = g.__officeHub ?? (g.__officeHub = { players: new Map(), hands: new Set(), chat: [], listeners: new Set() })
 if (!hub.chat) hub.chat = []
+if (!hub.hands) hub.hands = new Set()
 
 export function snapshot(): OfficePlayer[] {
   const now = Date.now()
   const out: OfficePlayer[] = []
   for (const [id, p] of hub.players) {
-    if (now - p.t > STALE_MS) hub.players.delete(id)
-    else out.push(p)
+    if (now - p.t > STALE_MS) { hub.players.delete(id); hub.hands.delete(id) }
+    else out.push({ ...p, hand: hub.hands.has(id) })
   }
   return out
 }
 
 const presenceFrame = () => `data: ${JSON.stringify(snapshot())}\n\n`
 const chatFrame = (m: ChatMsg) => `event: chat\ndata: ${JSON.stringify(m)}\n\n`
-const emit = (frame: string) => { for (const l of hub.listeners) l(frame) }
+const signalFrame = (from: number, data: unknown) => `event: signal\ndata: ${JSON.stringify({ from, data })}\n\n`
+
+const emit = (frame: string) => { for (const e of hub.listeners) e.fn(frame) }
 
 export function broadcast() { emit(presenceFrame()) }
 
-export function upsert(p: Omit<OfficePlayer, 't'>) {
+export function upsert(p: Omit<OfficePlayer, 't' | 'hand'>) {
   hub.players.set(p.id, { ...p, t: Date.now() })
   broadcast()
 }
 
 export function remove(id: number) {
+  hub.hands.delete(id)
   if (hub.players.delete(id)) broadcast()
+}
+
+export function setHand(id: number, raised: boolean) {
+  if (raised) hub.hands.add(id); else hub.hands.delete(id)
+  broadcast()
 }
 
 export function postChat(m: Omit<ChatMsg, 't'>): ChatMsg {
@@ -73,12 +82,18 @@ export function postChat(m: Omit<ChatMsg, 't'>): ChatMsg {
   return msg
 }
 
-export function subscribe(l: Listener): () => void {
-  hub.listeners.add(l)
-  return () => hub.listeners.delete(l)
+// Relay a WebRTC signaling message (offer/answer/ICE) to one specific user.
+export function signal(from: number, to: number, data: unknown) {
+  const frame = signalFrame(from, data)
+  for (const e of hub.listeners) if (e.userId === to) e.fn(frame)
 }
 
-// Frames sent to a client right when it connects: current presence + recent chat.
+export function subscribe(userId: number, fn: (frame: string) => void): () => void {
+  const entry: Entry = { userId, fn }
+  hub.listeners.add(entry)
+  return () => hub.listeners.delete(entry)
+}
+
 export function initialFrames(): string {
   const now = Date.now()
   const recent = hub.chat.filter(m => now - m.t < 60000)

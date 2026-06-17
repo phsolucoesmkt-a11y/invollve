@@ -20,7 +20,7 @@ export async function GET() {
         try { controller.enqueue(enc.encode(frame)) } catch {}
       }
       send(initialFrames())
-      unsub = subscribe(send)
+      unsub = subscribe(session.id, send)
       // keep-alive comment so proxies don't drop the idle connection
       ping = setInterval(() => {
         try { controller.enqueue(enc.encode(`: ping\n\n`)) } catch {}

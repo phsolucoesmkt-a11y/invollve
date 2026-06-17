@@ -17,7 +17,7 @@ const CHAT_RADIUS = 58 // how close avatars must be to chat (logical px)
 
 type Status = 'online' | 'ocupado' | 'reuniao'
 type Facing = 'down' | 'up' | 'left' | 'right'
-type NetPlayer = { id: number; name: string; role: string; x: number; y: number; status: Status; t: number }
+type NetPlayer = { id: number; name: string; role: string; x: number; y: number; status: Status; hand?: boolean; t: number }
 type Rect = { x: number; y: number; w: number; h: number }
 
 const MR: Rect = { x: 12, y: 20, w: 214, h: 156 }
@@ -206,13 +206,13 @@ export default function OfficeCanvas({ session, active = true }: { session: User
     const now = Date.now()
     const ph = frame.current * 0.35
     // people (others then me)
-    const people: { id: number; x: number; y: number; shirt: string; hair: string; facing: Facing; walking: boolean; name: string; status: Status; me: boolean }[] = []
+    const people: { id: number; x: number; y: number; shirt: string; hair: string; facing: Facing; walking: boolean; name: string; status: Status; hand: boolean; me: boolean }[] = []
     othersRef.current.forEach(p => {
       if (now - p.t > 12000) return
       const a = otherAnim.current.get(p.id)
-      people.push({ id: p.id, x: p.x, y: p.y, shirt: ROLE_SHIRT[p.role] ?? '#7a8290', hair: ROLE_HAIR[p.role] ?? '#33312e', facing: a?.facing ?? 'down', walking: a ? now < a.movingUntil : false, name: p.name.split(' ')[0], status: p.status, me: false })
+      people.push({ id: p.id, x: p.x, y: p.y, shirt: ROLE_SHIRT[p.role] ?? '#7a8290', hair: ROLE_HAIR[p.role] ?? '#33312e', facing: a?.facing ?? 'down', walking: a ? now < a.movingUntil : false, name: p.name.split(' ')[0], status: p.status, hand: !!p.hand, me: false })
     })
-    people.push({ id: meId, x: pos.current.x, y: pos.current.y, shirt, hair: hairCol, facing: face.current, walking: walk.current, name: firstName, status: myStatus(), me: true })
+    people.push({ id: meId, x: pos.current.x, y: pos.current.y, shirt, hair: hairCol, facing: face.current, walking: walk.current, name: firstName, status: myStatus(), hand: false, me: true })
     people.sort((a, b) => a.y - b.y) // simple depth order
     people.forEach(p => drawPerson(c, p.x, p.y, p.shirt, p.hair, p.facing, ph, p.walking))
 
@@ -225,6 +225,9 @@ export default function OfficeCanvas({ session, active = true }: { session: User
       const b = bubbles.current.get(p.id)
       if (b && now < b.until) drawBubble(c, p.x, p.y, b.text)
     })
+    // raised hands
+    c.textAlign = 'center'; c.font = '14px serif'
+    people.forEach(p => { if (p.hand) c.fillText('✋', p.x + 16, p.y - 34) })
 
     // meeting room label
     c.font = '600 10px ui-sans-serif, system-ui, sans-serif'; c.textAlign = 'center'

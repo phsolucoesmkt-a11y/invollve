@@ -2,7 +2,7 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { UserSession } from '@/lib/auth'
 import OfficeCanvas from './OfficeCanvas'
-import OfficeMedia from './OfficeMedia'
+import OfficeCall from './OfficeCall'
 
 // When the user is on this path, the office is fullscreen and "walkable".
 // Any other dashboard path opens as a floating window ON TOP of the live office.
@@ -88,8 +88,8 @@ export default function OfficeShell({ session, children }: { session: UserSessio
         </div>
       )}
 
-      {/* Local A/V controls — stays sharp and usable even while a module window is open */}
-      <OfficeMedia />
+      {/* A/V call controls + remote tiles — stays usable even while a module window is open */}
+      <OfficeCall session={session} />
     </div>
   )
 }
