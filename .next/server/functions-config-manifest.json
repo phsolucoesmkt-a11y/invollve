@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "functions": {
+    "/api/escritorio/chat": {},
+    "/api/escritorio/hand": {},
+    "/api/escritorio/move": {},
+    "/api/escritorio/signal": {},
+    "/api/escritorio/stream": {}
+  }
+}
