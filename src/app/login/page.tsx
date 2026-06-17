@@ -25,7 +25,7 @@ export default function LoginPage() {
       return
     }
     if (data.role === 'cliente') router.push('/portal')
-    else router.push('/dashboard')
+    else router.push('/dashboard/escritorio')
   }
 
   return (

@@ -6,6 +6,7 @@ import { UserSession, PERMISSIONS } from '@/lib/auth'
 
 const navItems = [
   { href: '/dashboard', label: 'Início', icon: '🏠', module: null },
+  { href: '/dashboard/escritorio', label: 'Escritório', icon: '🏢', module: null },
   { href: '/dashboard/financeiro', label: 'Financeiro', icon: '💰', module: 'financeiro' },
   { href: '/dashboard/comercial', label: 'Comercial', icon: '🚀', module: 'clientes' },
   { href: '/dashboard/clientes', label: 'Clientes', icon: '👥', module: 'clientes' },
