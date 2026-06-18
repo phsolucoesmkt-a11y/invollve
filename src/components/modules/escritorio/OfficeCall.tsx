@@ -19,6 +19,10 @@ import { UserSession } from '@/lib/auth'
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
+  // Free TURN servers (metered.ca) — fallback for restrictive NAT/firewalls
+  { urls: 'turn:a.relay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:a.relay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:a.relay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
 ]
 
 type Bg = 'none' | 'blur' | string
@@ -297,11 +301,28 @@ export default function OfficeCall({ session }: { session: UserSession }) {
 
 function RemoteTile({ name, stream }: { name: string; stream: MediaStream }) {
   const ref = useRef<HTMLVideoElement>(null)
-  useEffect(() => { if (ref.current) ref.current.srcObject = stream }, [stream])
-  const hasVideo = stream.getVideoTracks().length > 0
+  const [hasVideo, setHasVideo] = useState(stream.getVideoTracks().length > 0)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.srcObject = stream
+    el.play().catch(() => {})
+
+    // Update hasVideo whenever tracks are added/removed dynamically
+    const check = () => setHasVideo(stream.getVideoTracks().filter(t => t.readyState === 'live').length > 0)
+    stream.addEventListener('addtrack', check)
+    stream.addEventListener('removetrack', check)
+    check()
+    return () => {
+      stream.removeEventListener('addtrack', check)
+      stream.removeEventListener('removetrack', check)
+    }
+  }, [stream])
+
   return (
     <div className="relative rounded-lg overflow-hidden border border-white/15 bg-[#0f1420] shadow-xl flex-shrink-0" style={{ width: 168, height: 126 }}>
-      <video ref={ref} autoPlay playsInline className="w-full h-full object-cover" style={{ display: hasVideo ? 'block' : 'none' }} />
+      <video ref={ref} playsInline className="w-full h-full object-cover" style={{ display: hasVideo ? 'block' : 'none' }} />
       {!hasVideo && <div className="w-full h-full flex items-center justify-center text-zinc-400 text-3xl">🎧</div>}
       <span className="absolute bottom-1 left-1 text-[10px] text-white bg-black/60 px-1.5 py-0.5 rounded">{name}</span>
     </div>
