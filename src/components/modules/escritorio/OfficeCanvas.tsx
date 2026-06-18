@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { UserSession } from '@/lib/auth'
+import { updateNearby } from '@/lib/officeProximity'
 
 /*
  * Flat-modern office renderer + realtime multiplayer.
@@ -13,7 +14,8 @@ const BW = 640
 const BH = 420
 const SPEED = 1.8
 const PR = 8
-const CHAT_RADIUS = 58 // how close avatars must be to chat (logical px)
+const CHAT_RADIUS = 58
+const AUDIO_RADIUS = 200 // radius for A/V proximity (larger than chat)
 
 type Status = 'online' | 'ocupado' | 'reuniao'
 type Facing = 'down' | 'up' | 'left' | 'right'
@@ -149,7 +151,7 @@ function drawNameTag(c: CanvasRenderingContext2D, gx: number, gy: number, name: 
   c.fillStyle = '#fff'; c.fillText(name, x + 16, y + 12)
 }
 
-export default function OfficeCanvas({ session, active = true }: { session: UserSession; active?: boolean }) {
+export default function OfficeCanvas({ session, active = true, avatarColor }: { session: UserSession; active?: boolean; avatarColor?: string }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const keys = useRef(new Set<string>())
@@ -157,6 +159,8 @@ export default function OfficeCanvas({ session, active = true }: { session: User
   const animRef = useRef(0)
   const view = useRef({ scale: 2, ox: 0, oy: 0, cw: BW, ch: BH })
   const activeRef = useRef(active)
+  const zoomMult = useRef(1.0)
+  const resizeFn = useRef<() => void>(() => {})
   activeRef.current = active
 
   const othersRef = useRef<NetPlayer[]>([])
@@ -173,7 +177,7 @@ export default function OfficeCanvas({ session, active = true }: { session: User
   const [msgs, setMsgs] = useState<{ id: number; name: string; text: string; t: number }[]>([])
 
   const meId = session.id
-  const shirt = ROLE_SHIRT[session.role] ?? '#7a8290'
+  const shirt = avatarColor ?? ROLE_SHIRT[session.role] ?? '#7a8290'
   const hairCol = ROLE_HAIR[session.role] ?? '#33312e'
   const firstName = session.name.split(' ')[0]
 
@@ -210,7 +214,7 @@ export default function OfficeCanvas({ session, active = true }: { session: User
     othersRef.current.forEach(p => {
       if (now - p.t > 12000) return
       const a = otherAnim.current.get(p.id)
-      people.push({ id: p.id, x: p.x, y: p.y, shirt: ROLE_SHIRT[p.role] ?? '#7a8290', hair: ROLE_HAIR[p.role] ?? '#33312e', facing: a?.facing ?? 'down', walking: a ? now < a.movingUntil : false, name: p.name.split(' ')[0], status: p.status, hand: !!p.hand, me: false })
+      people.push({ id: p.id, x: p.x, y: p.y, shirt: (p as any).avatarColor ?? ROLE_SHIRT[p.role] ?? '#7a8290', hair: ROLE_HAIR[p.role] ?? '#33312e', facing: a?.facing ?? 'down', walking: a ? now < a.movingUntil : false, name: p.name.split(' ')[0], status: p.status, hand: !!p.hand, me: false })
     })
     people.push({ id: meId, x: pos.current.x, y: pos.current.y, shirt, hair: hairCol, facing: face.current, walking: walk.current, name: firstName, status: myStatus(), hand: false, me: true })
     people.sort((a, b) => a.y - b.y) // simple depth order
@@ -304,7 +308,7 @@ export default function OfficeCanvas({ session, active = true }: { session: User
       try {
         await fetch('/api/escritorio/move', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ x, y, status }), keepalive: true,
+          body: JSON.stringify({ x, y, status, avatarColor: avatarColor ?? null }), keepalive: true,
         })
       } catch {}
     }
@@ -324,10 +328,20 @@ export default function OfficeCanvas({ session, active = true }: { session: User
       const cw = wrap.clientWidth, ch = wrap.clientHeight
       canvas.width = cw * dpr; canvas.height = ch * dpr
       canvas.style.width = cw + 'px'; canvas.style.height = ch + 'px'
-      const scale = Math.min((cw * dpr) / BW, (ch * dpr) / BH)
+      const baseScale = Math.min((cw * dpr) / BW, (ch * dpr) / BH)
+      const scale = baseScale * zoomMult.current
       view.current = { scale, ox: (cw * dpr - BW * scale) / 2, oy: (ch * dpr - BH * scale) / 2, cw: cw * dpr, ch: ch * dpr }
     }
+    resizeFn.current = resize
     resize(); const ro = new ResizeObserver(resize); ro.observe(wrap)
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12
+      zoomMult.current = Math.max(0.5, Math.min(3, zoomMult.current * factor))
+      resizeFn.current()
+    }
+    canvas.addEventListener('wheel', onWheel, { passive: false })
 
     const isTyping = () => {
       const el = document.activeElement
@@ -358,11 +372,15 @@ export default function OfficeCanvas({ session, active = true }: { session: User
         pos.current = { x: nx, y: ny }
       } else { keys.current.clear(); walk.current = false }
 
-      // proximity: who is within chat range right now
+      // proximity checks
       const now = Date.now()
-      const near = othersRef.current.filter(p => now - p.t < 12000 && (p.x - pos.current.x) ** 2 + (p.y - pos.current.y) ** 2 < CHAT_RADIUS ** 2)
+      const active = othersRef.current.filter(p => now - p.t < 12000)
+      const dist2 = (p: NetPlayer) => (p.x - pos.current.x) ** 2 + (p.y - pos.current.y) ** 2
+      const near = active.filter(p => dist2(p) < CHAT_RADIUS ** 2)
+      const audioNear = active.filter(p => dist2(p) < AUDIO_RADIUS ** 2)
       const key = near.map(p => p.id).sort().join(',')
       if (key !== nearbyKey.current) { nearbyKey.current = key; setNearby(near.map(p => p.name.split(' ')[0])) }
+      updateNearby(new Set(audioNear.map(p => p.id)))
 
       render(ctx)
       animRef.current = requestAnimationFrame(loop)
@@ -371,6 +389,7 @@ export default function OfficeCanvas({ session, active = true }: { session: User
 
     return () => {
       window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp)
+      canvas.removeEventListener('wheel', onWheel)
       ro.disconnect(); cancelAnimationFrame(animRef.current)
     }
   }, [render])

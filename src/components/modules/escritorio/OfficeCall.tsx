@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { UserSession } from '@/lib/auth'
+import { subscribeNearby } from '@/lib/officeProximity'
 
 /*
  * Real A/V calling for the virtual office (WebRTC mesh, everyone online).
@@ -60,6 +61,7 @@ export default function OfficeCall({ session }: { session: UserSession }) {
 
   const peers = useRef(new Map<number, Peer>())
   const names = useRef(new Map<number, string>())
+  const onlineIds = useRef(new Set<number>())
   const micTrack = useRef<MediaStreamTrack | null>(null)
   const camTrack = useRef<MediaStreamTrack | null>(null)
   const screenTrack = useRef<MediaStreamTrack | null>(null)
@@ -135,10 +137,17 @@ export default function OfficeCall({ session }: { session: UserSession }) {
         const arr = JSON.parse(e.data) as { id: number; name: string }[]
         const online = new Set<number>()
         arr.forEach(p => { if (p.id !== meId) { online.add(p.id); names.current.set(p.id, p.name.split(' ')[0]) } })
-        online.forEach(id => { if (!peers.current.has(id)) createPeer(id) })
+        onlineIds.current = online
+        // Close peers for users who went offline
         peers.current.forEach((_p, id) => { if (!online.has(id)) closePeer(id) })
       } catch {}
     }
+
+    // Proximity-based: only connect A/V to people who are physically nearby
+    const unsubProximity = subscribeNearby((nearbyIds) => {
+      nearbyIds.forEach(id => { if (!peers.current.has(id) && onlineIds.current.has(id)) createPeer(id) })
+      peers.current.forEach((_p, id) => { if (!nearbyIds.has(id)) closePeer(id) })
+    })
 
     es.addEventListener('signal', async (ev) => {
       try {
@@ -163,6 +172,7 @@ export default function OfficeCall({ session }: { session: UserSession }) {
 
     return () => {
       es.close()
+      unsubProximity()
       peers.current.forEach(p => { try { p.pc.close() } catch {} })
       peers.current.clear()
     }

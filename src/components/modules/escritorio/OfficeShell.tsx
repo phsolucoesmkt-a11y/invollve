@@ -1,11 +1,11 @@
 'use client'
 import { usePathname, useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import { UserSession } from '@/lib/auth'
 import OfficeCanvas from './OfficeCanvas'
 import OfficeCall from './OfficeCall'
+import AvatarSelect, { shouldShowAvatarSelect, getAvatarColor } from './AvatarSelect'
 
-// When the user is on this path, the office is fullscreen and "walkable".
-// Any other dashboard path opens as a floating window ON TOP of the live office.
 const OFFICE_PATH = '/dashboard/escritorio'
 
 const TITLES: Record<string, string> = {
@@ -39,32 +39,36 @@ export default function OfficeShell({ session, children }: { session: UserSessio
   const router = useRouter()
   const overlayOpen = pathname !== OFFICE_PATH
 
-  function closeWindow() {
-    router.push(OFFICE_PATH)
+  // Avatar selection shown once per session on first enter
+  const [showSelect, setShowSelect] = useState(false)
+  const [avatarColor, setAvatarColor] = useState<string>('')
+
+  useEffect(() => {
+    setAvatarColor(getAvatarColor(session.role))
+    setShowSelect(shouldShowAvatarSelect())
+  }, [session.role])
+
+  function closeWindow() { router.push(OFFICE_PATH) }
+
+  function handleEnter(color: string) {
+    setAvatarColor(color)
+    setShowSelect(false)
   }
 
   return (
     <div className="relative flex-1 h-screen overflow-hidden bg-[#08080c]">
-      {/* Persistent, always-alive office layer — never unmounts across navigation */}
-      <div
-        className={`absolute inset-0 transition-all duration-300 ${
-          overlayOpen ? 'scale-[0.99] blur-[2px] brightness-[0.55]' : ''
-        }`}
-      >
-        <OfficeCanvas session={session} active={!overlayOpen} />
+      {/* Persistent office canvas */}
+      <div className={`absolute inset-0 transition-all duration-300 ${overlayOpen ? 'scale-[0.99] blur-[2px] brightness-[0.55]' : ''}`}>
+        <OfficeCanvas session={session} active={!overlayOpen && !showSelect} avatarColor={avatarColor} />
       </div>
 
-      {/* Floating module window on top of the office */}
+      {/* Floating module window */}
       {overlayOpen && (
-        <div
-          className="absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-6"
-          onClick={closeWindow}
-        >
+        <div className="absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-6" onClick={closeWindow}>
           <div
             className="flex flex-col w-full h-full max-w-[1400px] rounded-2xl border border-white/10 bg-[#0f0f13] shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
-            {/* Window title bar */}
             <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-white/5 bg-[#0a0a0e] flex-shrink-0">
               <div className="flex items-center gap-2">
                 <span className="flex gap-1.5">
@@ -77,18 +81,19 @@ export default function OfficeShell({ session, children }: { session: UserSessio
               <button
                 onClick={closeWindow}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-300 hover:text-white bg-white/5 hover:bg-white/10 transition-all"
-                title="Voltar ao escritório"
               >
                 🏢 Voltar ao escritório
               </button>
             </div>
-            {/* Module content */}
             <div className="flex-1 overflow-auto p-6">{children}</div>
           </div>
         </div>
       )}
 
-      {/* A/V call controls + remote tiles — stays usable even while a module window is open */}
+      {/* Avatar selection overlay (once per session) */}
+      {showSelect && <AvatarSelect session={session} onEnter={handleEnter} />}
+
+      {/* A/V controls */}
       <OfficeCall session={session} />
     </div>
   )

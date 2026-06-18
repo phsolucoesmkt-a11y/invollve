@@ -8,6 +8,7 @@ export interface OfficePlayer {
   id: number
   name: string
   role: string
+  avatarColor?: string
   x: number
   y: number
   status: OfficeStatus

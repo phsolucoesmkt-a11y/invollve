@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   const session = await getSession()
   if (!session) return Response.json({ error: 'unauthorized' }, { status: 401 })
 
-  let body: { x?: number; y?: number; status?: string }
+  let body: { x?: number; y?: number; status?: string; avatarColor?: string }
   try { body = await req.json() } catch { return Response.json({ error: 'bad json' }, { status: 400 }) }
 
   const status: OfficeStatus =
@@ -19,6 +19,7 @@ export async function POST(req: Request) {
     id: session.id,
     name: session.name,
     role: session.role,
+    avatarColor: typeof body.avatarColor === 'string' ? body.avatarColor : undefined,
     x: Number(body.x) || 0,
     y: Number(body.y) || 0,
     status,
