@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { UserSession } from '@/lib/auth'
 import OfficeCanvas from './OfficeCanvas'
 import MeetingRoom from './MeetingRoom'
-import { CallProvider } from './OfficeCall'
+import { CallProvider, CallControls, OfficeTiles } from './OfficeCall'
 import AvatarSelect, { shouldShowAvatarSelect, getAvatarColor } from './AvatarSelect'
 
 const OFFICE_PATH = '/dashboard/escritorio'
@@ -131,16 +131,21 @@ export default function OfficeShell({ session, children }: { session: UserSessio
             {/* Avatar selection overlay (once per session) */}
             {showSelect && <AvatarSelect session={session} onEnter={handleEnter} />}
 
-            {/* Enter-meeting button — shown only in the office area itself. No mic /
-                raise-hand here: people only talk once inside the meeting room. */}
+            {/* Proximity A/V in the office itself: a mic/cam dock + tiles of the
+                people connected near you (with live connection status), plus the
+                button to step into the full meeting room. */}
             {!showSelect && !overlayOpen && (
-              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30">
-                <button onClick={enterMeeting} title="Entrar na reunião"
-                  className="h-11 px-5 rounded-full flex items-center gap-2 text-white text-sm font-semibold shadow-xl transition-all hover:brightness-110 active:scale-95"
-                  style={{ background: 'var(--grad)' }}>
-                  📹 Entrar na reunião
-                </button>
-              </div>
+              <>
+                <OfficeTiles />
+                <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-end gap-3">
+                  <CallControls variant="office" />
+                  <button onClick={enterMeeting} title="Entrar na reunião"
+                    className="h-11 px-5 rounded-full flex items-center gap-2 text-white text-sm font-semibold shadow-xl transition-all hover:brightness-110 active:scale-95"
+                    style={{ background: 'var(--grad)' }}>
+                    📹 Entrar na reunião
+                  </button>
+                </div>
+              </>
             )}
           </>
         )}

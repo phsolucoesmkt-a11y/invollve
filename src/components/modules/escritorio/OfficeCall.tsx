@@ -36,7 +36,7 @@ type Peer = {
   stream: MediaStream
 }
 
-export type Remote = { id: number; name: string; stream: MediaStream }
+export type Remote = { id: number; name: string; stream: MediaStream; state: RTCPeerConnectionState }
 
 interface CallCtx {
   micOn: boolean
@@ -102,7 +102,7 @@ export function CallProvider({ session, children }: { session: UserSession; chil
 
   const refreshRemotes = useCallback(() => {
     const list: Remote[] = []
-    peers.current.forEach((p, id) => list.push({ id, name: names.current.get(id) ?? 'Colega', stream: p.stream }))
+    peers.current.forEach((p, id) => list.push({ id, name: names.current.get(id) ?? 'Colega', stream: p.stream, state: p.pc.connectionState }))
     setRemotes(list)
   }, [])
 
@@ -127,9 +127,10 @@ export function CallProvider({ session, children }: { session: UserSession; chil
     pc.onicecandidate = (e) => { if (e.candidate) post('/api/escritorio/signal', { to: peerId, data: { candidate: e.candidate } }) }
     pc.ontrack = (e) => { peer.stream.addTrack(e.track); refreshRemotes() }
     pc.onconnectionstatechange = () => {
-      if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) {
-        // presence-driven cleanup handles removal; 'failed' can recover on its own
-      }
+      // Re-render tiles with the live connection state (connecting → connected → failed).
+      refreshRemotes()
+      // ICE can wedge after a network blip; a restart often recovers it.
+      if (pc.connectionState === 'failed') { try { pc.restartIce() } catch {} }
     }
     return peer
   }, [refreshRemotes])
@@ -312,6 +313,48 @@ export function RemoteVideo({ id, className = '' }: { id: number; className?: st
   return <video ref={ref} muted autoPlay playsInline className={className} style={{ display: hasVideo ? 'block' : 'none' }} />
 }
 
+/* Floating tiles for the people currently connected near you in the OFFICE.
+ * Shows each remote's camera when live, the person's name, and — crucially — the
+ * live WebRTC connection state so you can SEE whether a call actually connects:
+ *   verde  = conectado (áudio/vídeo fluindo)
+ *   âmbar  = conectando (trocando sinalização / ICE)
+ *   vermelho = falhou (NAT/firewall — precisa de TURN). */
+export function OfficeTiles() {
+  const { remotes } = useCall()
+  if (remotes.length === 0) return null
+  return (
+    <div className="absolute top-3 right-3 z-30 flex flex-col gap-2 w-44 max-h-[72vh] overflow-y-auto">
+      {remotes.map(r => <OfficeTile key={r.id} remote={r} />)}
+    </div>
+  )
+}
+
+const STATE_META: Record<string, { dot: string; label: string }> = {
+  connected:    { dot: 'bg-green-400',  label: 'conectado' },
+  connecting:   { dot: 'bg-amber-400 animate-pulse',  label: 'conectando…' },
+  new:          { dot: 'bg-amber-400 animate-pulse',  label: 'conectando…' },
+  disconnected: { dot: 'bg-orange-400', label: 'caiu…' },
+  failed:       { dot: 'bg-red-500',    label: 'falhou' },
+  closed:       { dot: 'bg-zinc-500',   label: 'encerrado' },
+}
+
+function OfficeTile({ remote }: { remote: Remote }) {
+  const meta = STATE_META[remote.state] ?? STATE_META.new
+  return (
+    <div className="relative w-44 h-28 rounded-xl overflow-hidden bg-[#161c28] border border-white/10 shadow-xl flex items-center justify-center">
+      <span className="text-2xl font-bold text-white/80">{remote.name.slice(0, 2).toUpperCase()}</span>
+      <RemoteVideo id={remote.id} className="absolute inset-0 w-full h-full object-cover" />
+      <div className="absolute bottom-0 inset-x-0 px-2 py-1 bg-black/55 backdrop-blur-sm text-[11px] text-white flex items-center justify-between gap-1">
+        <span className="truncate">{remote.name}</span>
+        <span className="flex items-center gap-1 flex-shrink-0">
+          <span className={`w-2 h-2 rounded-full ${meta.dot}`} />
+          <span className="text-[9px] text-white/70">{meta.label}</span>
+        </span>
+      </div>
+    </div>
+  )
+}
+
 /* Reusable control dock. `variant` decides which buttons appear; `extra` slots a
  * primary action (Enter / Leave meeting). */
 export function CallControls({ variant, extra }: { variant: 'office' | 'meeting'; extra?: React.ReactNode }) {
@@ -321,7 +364,7 @@ export function CallControls({ variant, extra }: { variant: 'office' | 'meeting'
       {error && <div className="text-[11px] text-amber-300 bg-amber-950/70 rounded-lg px-3 py-1">{error}</div>}
       <div className="flex items-center gap-2 bg-[#0f1420]/90 rounded-full px-3 py-2 border border-white/10 shadow-xl">
         <CtrlButton on={micOn} onClick={toggleMic} title="Microfone" label="mic" />
-        {variant === 'meeting' && <CtrlButton on={camOn} onClick={toggleCam} title="Câmera" label="cam" />}
+        <CtrlButton on={camOn} onClick={toggleCam} title="Câmera" label="cam" />
         {variant === 'meeting' && <CtrlButton on={screenOn} onClick={toggleScreen} title="Compartilhar tela" label="screen" color="blue" />}
         <CtrlButton on={handUp} onClick={toggleHand} title="Levantar a mão" label="hand" color="amber" />
         {extra}

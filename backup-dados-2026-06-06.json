@@ -1,0 +1,41 @@
+{
+  "backup_info": {
+    "exported_at": "2026-06-06",
+    "source": "sistema.invollve.com.br (produção cPanel)",
+    "method": "APIs autenticadas (sessão sócio)",
+    "nota": "Senhas (hashes) NÃO incluídas — APIs não expõem. Recriar usuários com senha temporária na migração.",
+    "avatares_referenciados": ["/uploads/avatars/1.png"]
+  },
+  "users": [
+    {"id":2,"name":"Administrador","email":"admin@invollve.com","role":"socio","created_at":"2026-06-06 02:39:21"},
+    {"id":7,"name":"João Carlos","email":"joaocarlos@invollve.com.br","role":"designer","created_at":"2026-06-06 02:49:16"},
+    {"id":4,"name":"João Paulo","email":"joaopaulo@invollve.com.br","role":"gestor_trafego","created_at":"2026-06-06 02:46:57"},
+    {"id":6,"name":"Kayque Veloso","email":"kayque.veloso@invollve.com.br","role":"socio","created_at":"2026-06-06 02:48:08"},
+    {"id":5,"name":"Maessa Saraiva","email":"maessasaraiva@invollve.com.br","role":"social_media","created_at":"2026-06-06 02:47:22"},
+    {"id":1,"name":"Pedro Bernardo","email":"admin@invollve.com.br","role":"socio","created_at":"2026-06-06 02:38:48"},
+    {"id":3,"name":"Sara Sousa","email":"sarasousa@invollve.com.br","role":"socio","created_at":"2026-06-06 02:44:05"}
+  ],
+  "clients": [
+    {"id":3,"name":"Pedro Reis","email":"","phone":"","company":"","notes":"","status":"ativo","meta_account_id":null,"meta_account_id2":null,"google_ads_id":null,"instagram_id":null,"logo_url":null,"created_at":"2026-06-06 03:07:34"},
+    {"id":1,"name":"Real Equipamentos ","email":"","phone":"","company":"","notes":"","status":"ativo","meta_account_id":null,"meta_account_id2":null,"google_ads_id":null,"instagram_id":null,"logo_url":null,"created_at":"2026-06-06 03:06:55"},
+    {"id":2,"name":"Solange Freitas","email":"","phone":"","company":"","notes":"","status":"ativo","meta_account_id":null,"meta_account_id2":null,"google_ads_id":null,"instagram_id":null,"logo_url":null,"created_at":"2026-06-06 03:07:16"}
+  ],
+  "leads": [],
+  "tasks": [
+    {"id":1,"title":"Subir campanha Solange ","description":"","status":"todo","priority":"media","assigned_to":4,"client_id":2,"due_date":"2026-06-08","created_at":"2026-06-06 03:11:00"}
+  ],
+  "financial_entries": [
+    {"id":1,"type":"entrada","description":"","amount":0,"category":"","status":"pendente","due_date":null,"paid_date":null,"client_id":null,"created_at":"2026-06-06 02:58:16"}
+  ],
+  "rh_people": [
+    {"id":1,"name":"Pedro Bernardo","role":"Equipe","birthday":"2001-04-19","email":"admin@invollve.com.br","phone":null,"notes":null,"created_at":"2026-06-06 02:51:51"}
+  ],
+  "meetings": [
+    {"id":2,"title":"Teste","description":"","meet_link":"https://meet.google.com/bml-wfj-xdr","start_time":"2026-06-06T00:11","end_time":"2026-06-06T00:11","attendees":"sarasousa@gmail.com","client_id":null,"created_by":1,"created_at":"2026-06-06 03:12:20"}
+  ],
+  "drive_links": [],
+  "client_data": [],
+  "chat_messages": [
+    {"id":1,"user_id":1,"content":"Teste","created_at":"2026-06-06 03:08:15"}
+  ]
+}
