@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { UserSession } from '@/lib/auth'
 import { updateNearby } from '@/lib/officeProximity'
+import { subscribeOfficeStream } from '@/lib/officeStream'
 import { useCall, CallControls, SelfView, RemoteVideo } from './OfficeCall'
 
 /*
@@ -58,17 +59,15 @@ export default function MeetingRoom({ session, avatarColor, onLeave }: { session
   const { micOn, camOn, screenOn } = useCall()
   const [participants, setParticipants] = useState<Participant[]>([])
 
-  // Presence: who is in the meeting + their assigned chair + who is sharing screen.
+  // Presence (who is in the meeting) over the ONE shared SSE connection.
   useEffect(() => {
-    const es = new EventSource('/api/escritorio/stream')
-    es.onmessage = (e) => {
-      try {
-        const arr = JSON.parse(e.data) as (Participant & { meeting: boolean; t: number })[]
-        const now = Date.now()
-        setParticipants(arr.filter(p => p.meeting && now - p.t < 12000))
-      } catch {}
+    const onPresence = (players: unknown[]) => {
+      const arr = players as (Participant & { meeting: boolean; t: number })[]
+      const now = Date.now()
+      setParticipants(arr.filter(p => p.meeting && now - p.t < 12000))
     }
-    return () => es.close()
+    const unsub = subscribeOfficeStream({ presence: onPresence })
+    return () => unsub()
   }, [])
 
   // Connect A/V to every other person in the meeting while this view is mounted.

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { UserSession } from '@/lib/auth'
 import { updateNearby } from '@/lib/officeProximity'
+import { subscribeOfficeStream } from '@/lib/officeStream'
 
 /*
  * Flat-modern office renderer + realtime multiplayer.
@@ -275,26 +276,21 @@ export default function OfficeCanvas({ session, active = true, avatarColor }: { 
     c.fillText('WASD / setas para mover · scroll para zoom', cw - 16, ch - 18)
   }, [shirt, hairCol, firstName, meId, active, myStatus])
 
-  // SSE in (presence + chat)
+  // Presence + chat over the ONE shared SSE connection.
   useEffect(() => {
-    const es = new EventSource('/api/escritorio/stream')
-    es.onmessage = (e) => {
-      try {
-        const arr = JSON.parse(e.data) as NetPlayer[]
-        othersRef.current = arr.filter(p => p.id !== meId)
-      } catch {}
+    const onPresence = (players: unknown[]) => {
+      othersRef.current = (players as NetPlayer[]).filter(p => p.id !== meId)
     }
-    es.addEventListener('chat', (e) => {
-      try {
-        const m = JSON.parse((e as MessageEvent).data) as { id: number; name: string; x: number; y: number; text: string; t: number }
-        const mp = pos.current
-        const near = m.id === meId || (m.x - mp.x) ** 2 + (m.y - mp.y) ** 2 < (CHAT_RADIUS * 2.2) ** 2
-        if (!near) return
-        bubbles.current.set(m.id, { text: m.text, until: Date.now() + 4500 })
-        setMsgs(prev => [...prev.slice(-29), { id: m.id, name: m.name.split(' ')[0], text: m.text, t: m.t }])
-      } catch {}
-    })
-    return () => es.close()
+    const onChat = (raw: unknown) => {
+      const m = raw as { id: number; name: string; x: number; y: number; text: string; t: number }
+      const mp = pos.current
+      const near = m.id === meId || (m.x - mp.x) ** 2 + (m.y - mp.y) ** 2 < (CHAT_RADIUS * 2.2) ** 2
+      if (!near) return
+      bubbles.current.set(m.id, { text: m.text, until: Date.now() + 4500 })
+      setMsgs(prev => [...prev.slice(-29), { id: m.id, name: m.name.split(' ')[0], text: m.text, t: m.t }])
+    }
+    const unsub = subscribeOfficeStream({ presence: onPresence, chat: onChat })
+    return () => unsub()
   }, [meId])
 
   // WASD key tracking

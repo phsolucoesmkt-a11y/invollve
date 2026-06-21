@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import { UserSession } from '@/lib/auth'
 import { subscribeNearby } from '@/lib/officeProximity'
+import { subscribeOfficeStream } from '@/lib/officeStream'
 
 /*
  * Real A/V calling for the virtual office (WebRTC mesh).
@@ -165,30 +166,20 @@ export function CallProvider({ session, children }: { session: UserSession; chil
       .catch(() => {})
   }, [])
 
-  // --- signaling + presence over SSE ---
+  // --- signaling + presence over the ONE shared SSE connection ---
   useEffect(() => {
-    const es = new EventSource('/api/escritorio/stream')
-
     // Presence here only keeps teammate names fresh for the tiles/labels. Peer
     // open/close is driven SOLELY by proximity (subscribeNearby) below — using
     // this stream to close peers would race with proximity and kill live calls.
-    es.onmessage = (e) => {
-      try {
-        const arr = JSON.parse(e.data) as { id: number; name: string }[]
-        arr.forEach(p => { if (p.id !== meId) names.current.set(p.id, p.name.split(' ')[0]) })
-      } catch {}
+    const onPresence = (players: unknown[]) => {
+      (players as { id: number; name: string }[]).forEach(p => {
+        if (p.id !== meId) names.current.set(p.id, p.name.split(' ')[0])
+      })
     }
 
-    // Connect A/V to whoever the mounted view wants (proximity or meeting). The
-    // wanted set is already derived from present users, so no extra online gate.
-    const unsubProximity = subscribeNearby((wantedIds) => {
-      wantedIds.forEach(id => { if (!peers.current.has(id)) createPeer(id) })
-      peers.current.forEach((_p, id) => { if (!wantedIds.has(id)) closePeer(id) })
-    })
-
-    es.addEventListener('signal', async (ev) => {
+    const onSignal = async (from: number, raw: unknown) => {
+      const data = raw as any
       try {
-        const { from, data } = JSON.parse((ev as MessageEvent).data) as { from: number; data: any }
         let peer = peers.current.get(from)
         if (!peer) peer = createPeer(from)
         const pc = peer.pc
@@ -207,10 +198,19 @@ export function CallProvider({ session, children }: { session: UserSession; chil
           try { await pc.addIceCandidate(data.candidate) } catch (err) { console.warn('[OfficeCall] ICE add failed', err) }
         }
       } catch (err) { console.error('[OfficeCall] signal handling error', err) }
+    }
+
+    const unsubStream = subscribeOfficeStream({ presence: onPresence, signal: onSignal })
+
+    // Connect A/V to whoever the mounted view wants (proximity or meeting). The
+    // wanted set is already derived from present users, so no extra online gate.
+    const unsubProximity = subscribeNearby((wantedIds) => {
+      wantedIds.forEach(id => { if (!peers.current.has(id)) createPeer(id) })
+      peers.current.forEach((_p, id) => { if (!wantedIds.has(id)) closePeer(id) })
     })
 
     return () => {
-      es.close()
+      unsubStream()
       unsubProximity()
       peers.current.forEach(p => { try { p.pc.close() } catch {} })
       peers.current.clear()
