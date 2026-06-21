@@ -20,12 +20,18 @@ import { subscribeNearby } from '@/lib/officeProximity'
  * Uses public STUN + free TURN fallback for restrictive NAT.
  */
 
+// Metered TURN (Invollve account, free tier) — real relay so calls connect across
+// different homes/countries (the old public openrelay was discontinued). The TURN
+// over TCP/TLS on 443 also punches through restrictive corporate firewalls.
+const TURN_USER = '7cf0912d3a98f1bd5e599264'
+const TURN_PASS = 'PAfHDY/JyRr+3rAC'
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-  { urls: 'turn:a.relay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:a.relay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:a.relay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'stun:stun.relay.metered.ca:80' },
+  { urls: 'turn:global.relay.metered.ca:80', username: TURN_USER, credential: TURN_PASS },
+  { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: TURN_USER, credential: TURN_PASS },
+  { urls: 'turn:global.relay.metered.ca:443', username: TURN_USER, credential: TURN_PASS },
+  { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: TURN_USER, credential: TURN_PASS },
 ]
 
 type Peer = {

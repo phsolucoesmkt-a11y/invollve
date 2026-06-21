@@ -22,11 +22,16 @@ const STUN: RTCIceServer[] = [
   { urls: 'stun:stun1.l.google.com:19302' },
 ]
 
-// Last-resort fallback (legacy free relay — unreliable, kept only as a backup).
-const LEGACY_TURN: RTCIceServer[] = [
-  { urls: 'turn:a.relay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:a.relay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:a.relay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+// Metered TURN (Invollve account, free tier) — static credentials, used when the
+// API-key env vars aren't configured. Reliable relay for cross-country calls.
+const TURN_USER = '7cf0912d3a98f1bd5e599264'
+const TURN_PASS = 'PAfHDY/JyRr+3rAC'
+const METERED_TURN: RTCIceServer[] = [
+  { urls: 'stun:stun.relay.metered.ca:80' },
+  { urls: 'turn:global.relay.metered.ca:80', username: TURN_USER, credential: TURN_PASS },
+  { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: TURN_USER, credential: TURN_PASS },
+  { urls: 'turn:global.relay.metered.ca:443', username: TURN_USER, credential: TURN_PASS },
+  { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: TURN_USER, credential: TURN_PASS },
 ]
 
 export async function GET() {
@@ -50,5 +55,5 @@ export async function GET() {
     }
   }
 
-  return Response.json({ iceServers: [...STUN, ...LEGACY_TURN] })
+  return Response.json({ iceServers: [...STUN, ...METERED_TURN] })
 }
