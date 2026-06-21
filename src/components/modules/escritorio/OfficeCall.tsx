@@ -73,7 +73,6 @@ export function CallProvider({ session, children }: { session: UserSession; chil
 
   const peers = useRef(new Map<number, Peer>())
   const names = useRef(new Map<number, string>())
-  const onlineIds = useRef(new Set<number>())
   const micTrack = useRef<MediaStreamTrack | null>(null)
   const camTrack = useRef<MediaStreamTrack | null>(null)
   const screenTrack = useRef<MediaStreamTrack | null>(null)
@@ -113,6 +112,9 @@ export function CallProvider({ session, children }: { session: UserSession; chil
     const stream = new MediaStream()
     const peer: Peer = { pc, audioSender, videoSender, makingOffer: false, stream }
     peers.current.set(peerId, peer)
+    // Show a tile immediately ("conectando…") so there's instant visual feedback
+    // that a connection was started, even before any media arrives.
+    refreshRemotes()
 
     audioSender.replaceTrack(micTrack.current).catch(() => {})
     videoSender.replaceTrack(videoTrack()).catch(() => {})
@@ -151,19 +153,20 @@ export function CallProvider({ session, children }: { session: UserSession; chil
   useEffect(() => {
     const es = new EventSource('/api/escritorio/stream')
 
+    // Presence here only keeps teammate names fresh for the tiles/labels. Peer
+    // open/close is driven SOLELY by proximity (subscribeNearby) below — using
+    // this stream to close peers would race with proximity and kill live calls.
     es.onmessage = (e) => {
       try {
         const arr = JSON.parse(e.data) as { id: number; name: string }[]
-        const online = new Set<number>()
-        arr.forEach(p => { if (p.id !== meId) { online.add(p.id); names.current.set(p.id, p.name.split(' ')[0]) } })
-        onlineIds.current = online
-        peers.current.forEach((_p, id) => { if (!online.has(id)) closePeer(id) })
+        arr.forEach(p => { if (p.id !== meId) names.current.set(p.id, p.name.split(' ')[0]) })
       } catch {}
     }
 
-    // Connect A/V only to the peer set the mounted view wants (proximity or meeting).
+    // Connect A/V to whoever the mounted view wants (proximity or meeting). The
+    // wanted set is already derived from present users, so no extra online gate.
     const unsubProximity = subscribeNearby((wantedIds) => {
-      wantedIds.forEach(id => { if (!peers.current.has(id) && onlineIds.current.has(id)) createPeer(id) })
+      wantedIds.forEach(id => { if (!peers.current.has(id)) createPeer(id) })
       peers.current.forEach((_p, id) => { if (!wantedIds.has(id)) closePeer(id) })
     })
 
