@@ -73,6 +73,7 @@ export function CallProvider({ session, children }: { session: UserSession; chil
 
   const peers = useRef(new Map<number, Peer>())
   const names = useRef(new Map<number, string>())
+  const iceServers = useRef<RTCIceServer[]>(ICE_SERVERS)
   const micTrack = useRef<MediaStreamTrack | null>(null)
   const camTrack = useRef<MediaStreamTrack | null>(null)
   const screenTrack = useRef<MediaStreamTrack | null>(null)
@@ -106,7 +107,7 @@ export function CallProvider({ session, children }: { session: UserSession; chil
   }, [])
 
   const createPeer = useCallback((peerId: number): Peer => {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
+    const pc = new RTCPeerConnection({ iceServers: iceServers.current })
     const audioSender = pc.addTransceiver('audio', { direction: 'sendrecv' }).sender
     const videoSender = pc.addTransceiver('video', { direction: 'sendrecv' }).sender
     const stream = new MediaStream()
@@ -148,6 +149,15 @@ export function CallProvider({ session, children }: { session: UserSession; chil
     peers.current.delete(peerId)
     refreshRemotes()
   }, [refreshRemotes])
+
+  // Load the real ICE/TURN server list once at startup (needed for cross-country
+  // calls). Falls back to the hardcoded list if the request fails.
+  useEffect(() => {
+    fetch('/api/escritorio/ice')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d?.iceServers) && d.iceServers.length) iceServers.current = d.iceServers })
+      .catch(() => {})
+  }, [])
 
   // --- signaling + presence over SSE ---
   useEffect(() => {

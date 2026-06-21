@@ -3,6 +3,7 @@
   "functions": {
     "/api/escritorio/chat": {},
     "/api/escritorio/hand": {},
+    "/api/escritorio/ice": {},
     "/api/escritorio/meeting": {},
     "/api/escritorio/move": {},
     "/api/escritorio/screen": {},

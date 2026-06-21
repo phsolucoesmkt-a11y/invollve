@@ -12,6 +12,7 @@
   "/api/drive/route": "/api/drive",
   "/api/escritorio/chat/route": "/api/escritorio/chat",
   "/api/escritorio/hand/route": "/api/escritorio/hand",
+  "/api/escritorio/ice/route": "/api/escritorio/ice",
   "/api/escritorio/meeting/route": "/api/escritorio/meeting",
   "/api/escritorio/move/route": "/api/escritorio/move",
   "/api/escritorio/screen/route": "/api/escritorio/screen",

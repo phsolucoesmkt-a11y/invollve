@@ -326,6 +326,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/api/escritorio/ice/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/escritorio/ice">> = Specific
+  const handler = {} as typeof import("../../src/app/api/escritorio/ice/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/api/escritorio/meeting/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/escritorio/meeting">> = Specific

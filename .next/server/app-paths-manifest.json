@@ -12,6 +12,7 @@
   "/api/drive/route": "app/api/drive/route.js",
   "/api/escritorio/chat/route": "app/api/escritorio/chat/route.js",
   "/api/escritorio/hand/route": "app/api/escritorio/hand/route.js",
+  "/api/escritorio/ice/route": "app/api/escritorio/ice/route.js",
   "/api/escritorio/meeting/route": "app/api/escritorio/meeting/route.js",
   "/api/escritorio/move/route": "app/api/escritorio/move/route.js",
   "/api/escritorio/screen/route": "app/api/escritorio/screen/route.js",
