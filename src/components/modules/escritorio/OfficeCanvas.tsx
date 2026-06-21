@@ -15,9 +15,10 @@ import { updateNearby } from '@/lib/officeProximity'
 
 const BW = 640
 const BH = 420
+const SPEED = 1.8
 const PR = 8
 const CHAT_RADIUS = 58
-const AUDIO_RADIUS = 220 // proximity radius for office voice (covers the open area)
+const AUDIO_RADIUS = 220
 
 type Status = 'online' | 'ocupado' | 'reuniao'
 type Facing = 'down' | 'up' | 'left' | 'right'
@@ -146,6 +147,18 @@ function drawNameTag(c: CanvasRenderingContext2D, gx: number, gy: number, name: 
   c.fillStyle = '#fff'; c.fillText(name, x + 16, y + 12)
 }
 
+function hitsWall(x: number, y: number) {
+  for (const w of WALLS) {
+    const cx = Math.max(w.x, Math.min(x, w.x + w.w))
+    const cy = Math.max(w.y, Math.min(y, w.y + w.h))
+    if ((x - cx) ** 2 + (y - cy) ** 2 < (PR - 1) ** 2) return true
+  }
+  return false
+}
+function inMeetingRoom(x: number, y: number) {
+  return x > MR.x + WT && x < MR.x + MR.w - WT && y > MR.y + WT && y < MR.y + MR.h - WT
+}
+
 export default function OfficeCanvas({ session, active = true, avatarColor }: { session: UserSession; active?: boolean; avatarColor?: string }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -156,8 +169,12 @@ export default function OfficeCanvas({ session, active = true, avatarColor }: { 
   const resizeFn = useRef<() => void>(() => {})
   activeRef.current = active
 
+  const keys = useRef(new Set<string>())
+  const pos = useRef({ x: 400, y: 170 })
+  const face = useRef<Facing>('down')
+  const lastSent = useRef({ x: -999, y: -999, status: '', t: 0 })
+
   const othersRef = useRef<NetPlayer[]>([])
-  const mySeat = useRef(-1)
   const frame = useRef(0)
   const bubbles = useRef(new Map<number, { text: string; until: number }>())
   const nearbyKey = useRef('')
@@ -171,11 +188,11 @@ export default function OfficeCanvas({ session, active = true, avatarColor }: { 
   const hairCol = ROLE_HAIR[session.role] ?? '#33312e'
   const firstName = session.name.split(' ')[0]
 
-  // My fixed seat position (falls back to room centre while waiting for a seat).
-  const myPos = () => {
-    const s = OFFICE_SEATS[mySeat.current]
-    return s ?? { x: 440, y: 200 }
-  }
+  const myStatus = useCallback(() => {
+    if (!activeRef.current) return 'ocupado' as const
+    if (inMeetingRoom(pos.current.x, pos.current.y)) return 'reuniao' as const
+    return 'online' as const
+  }, [])
 
   const render = useCallback((c: CanvasRenderingContext2D) => {
     const { scale, ox, oy, cw, ch } = view.current
@@ -214,9 +231,9 @@ export default function OfficeCanvas({ session, active = true, avatarColor }: { 
         people.push({ id: p.id, x: seat.x, y: seat.y, facing: 'up', shirt: shirtCol, hair, name, status: p.status, hand: !!p.hand, me: false })
       }
     })
-    if (mySeat.current >= 0) {
-      const mp = myPos()
-      people.push({ id: meId, x: mp.x, y: mp.y, facing: 'up', shirt, hair: hairCol, name: firstName, status: active ? 'online' : 'ocupado', hand: false, me: true })
+    {
+      const mp = pos.current
+      people.push({ id: meId, x: mp.x, y: mp.y, facing: face.current, shirt, hair: hairCol, name: firstName, status: active ? myStatus() : 'ocupado', hand: false, me: true })
     }
     people.sort((a, b) => a.y - b.y) // simple depth order
     people.forEach(p => drawPerson(c, p.x, p.y, p.shirt, p.hair, p.facing))
@@ -255,8 +272,8 @@ export default function OfficeCanvas({ session, active = true, avatarColor }: { 
 
     c.textAlign = 'right'; c.font = '12px ui-sans-serif, system-ui, sans-serif'
     c.fillStyle = 'rgba(60,50,35,0.5)'
-    c.fillText('Você está no seu lugar · use o scroll para dar zoom', cw - 16, ch - 18)
-  }, [shirt, hairCol, firstName, meId, active])
+    c.fillText('WASD / setas para mover · scroll para zoom', cw - 16, ch - 18)
+  }, [shirt, hairCol, firstName, meId, active, myStatus])
 
   // SSE in (presence + chat)
   useEffect(() => {
@@ -264,16 +281,13 @@ export default function OfficeCanvas({ session, active = true, avatarColor }: { 
     es.onmessage = (e) => {
       try {
         const arr = JSON.parse(e.data) as NetPlayer[]
-        const mine = arr.find(p => p.id === meId)
-        mySeat.current = mine ? mine.seat : -1
         othersRef.current = arr.filter(p => p.id !== meId)
       } catch {}
     }
     es.addEventListener('chat', (e) => {
       try {
         const m = JSON.parse((e as MessageEvent).data) as { id: number; name: string; x: number; y: number; text: string; t: number }
-        const mp = myPos()
-        // show only messages from people seated near me (or my own)
+        const mp = pos.current
         const near = m.id === meId || (m.x - mp.x) ** 2 + (m.y - mp.y) ** 2 < (CHAT_RADIUS * 2.2) ** 2
         if (!near) return
         bubbles.current.set(m.id, { text: m.text, until: Date.now() + 4500 })
@@ -283,7 +297,19 @@ export default function OfficeCanvas({ session, active = true, avatarColor }: { 
     return () => es.close()
   }, [meId])
 
-  // render loop + proximity (no movement — fixed seats)
+  // WASD key tracking
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      keys.current.add(e.key)
+    }
+    const onUp = (e: KeyboardEvent) => keys.current.delete(e.key)
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup', onUp)
+    return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp) }
+  }, [])
+
+  // render loop + WASD movement + proximity
   useEffect(() => {
     const canvas = canvasRef.current, wrap = wrapRef.current
     if (!canvas || !wrap) return
@@ -311,14 +337,50 @@ export default function OfficeCanvas({ session, active = true, avatarColor }: { 
 
     const loop = () => {
       frame.current++
-      // proximity for office voice — seated neighbours not in the meeting
       const now = Date.now()
-      const mp = myPos()
-      const seated = othersRef.current.filter(p => now - p.t < 12000 && !p.meeting && p.seat >= 0)
-      const posOf = (p: NetPlayer) => OFFICE_SEATS[p.seat] ?? { x: -999, y: -999 }
+
+      // WASD movement
+      if (activeRef.current) {
+        const k = keys.current
+        let dx = 0, dy = 0
+        if (k.has('ArrowLeft')  || k.has('a') || k.has('A')) dx -= SPEED
+        if (k.has('ArrowRight') || k.has('d') || k.has('D')) dx += SPEED
+        if (k.has('ArrowUp')    || k.has('w') || k.has('W')) dy -= SPEED
+        if (k.has('ArrowDown')  || k.has('s') || k.has('S')) dy += SPEED
+        if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707 }
+        const moving = dx !== 0 || dy !== 0
+        if (moving) {
+          const nx = Math.max(PR, Math.min(BW - PR, pos.current.x + dx))
+          const ny = Math.max(PR, Math.min(BH - PR, pos.current.y + dy))
+          if (!hitsWall(nx, pos.current.y)) pos.current.x = nx
+          if (!hitsWall(pos.current.x, ny)) pos.current.y = ny
+          if (dx < 0) face.current = 'left'
+          else if (dx > 0) face.current = 'right'
+          else if (dy < 0) face.current = 'up'
+          else face.current = 'down'
+        }
+        // POST position every ~100ms when moving, or every 3s as heartbeat
+        const ls = lastSent.current
+        const status = myStatus()
+        const moved = Math.abs(pos.current.x - ls.x) > 1 || Math.abs(pos.current.y - ls.y) > 1
+        const stale = now - ls.t > 3000
+        if (moved || stale || status !== ls.status) {
+          lastSent.current = { x: pos.current.x, y: pos.current.y, status, t: now }
+          fetch('/api/escritorio/move', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ x: pos.current.x, y: pos.current.y, status }),
+            keepalive: true,
+          }).catch(() => {})
+        }
+      }
+
+      // proximity for voice chat
+      const mp = pos.current
+      const others = othersRef.current.filter(p => now - p.t < 12000 && !p.meeting)
+      const posOf = (p: NetPlayer) => p.seat >= 0 ? (OFFICE_SEATS[p.seat] ?? { x: p.x, y: p.y }) : { x: p.x, y: p.y }
       const dist2 = (p: NetPlayer) => { const s = posOf(p); return (s.x - mp.x) ** 2 + (s.y - mp.y) ** 2 }
-      const near = seated.filter(p => dist2(p) < CHAT_RADIUS ** 2)
-      const audioNear = seated.filter(p => dist2(p) < AUDIO_RADIUS ** 2)
+      const near = others.filter(p => dist2(p) < CHAT_RADIUS ** 2)
+      const audioNear = others.filter(p => dist2(p) < AUDIO_RADIUS ** 2)
       const key = near.map(p => p.id).sort().join(',')
       if (key !== nearbyKey.current) { nearbyKey.current = key; setNearby(near.map(p => p.name.split(' ')[0])) }
       updateNearby(new Set(audioNear.map(p => p.id)))
@@ -331,9 +393,9 @@ export default function OfficeCanvas({ session, active = true, avatarColor }: { 
     return () => {
       canvas.removeEventListener('wheel', onWheel)
       ro.disconnect(); cancelAnimationFrame(animRef.current)
-      updateNearby(new Set()) // drop office peers when leaving the canvas
+      updateNearby(new Set())
     }
-  }, [render])
+  }, [render, myStatus])
 
   async function sendChat(e: React.FormEvent) {
     e.preventDefault()
@@ -341,7 +403,7 @@ export default function OfficeCanvas({ session, active = true, avatarColor }: { 
     const t = el?.value.trim()
     if (!t) return
     el!.value = ''
-    const mp = myPos()
+    const mp = pos.current
     try {
       await fetch('/api/escritorio/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
