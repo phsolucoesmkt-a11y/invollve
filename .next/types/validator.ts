@@ -326,10 +326,28 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/api/escritorio/meeting/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/escritorio/meeting">> = Specific
+  const handler = {} as typeof import("../../src/app/api/escritorio/meeting/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/api/escritorio/move/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/escritorio/move">> = Specific
   const handler = {} as typeof import("../../src/app/api/escritorio/move/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/api/escritorio/screen/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/escritorio/screen">> = Specific
+  const handler = {} as typeof import("../../src/app/api/escritorio/screen/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check

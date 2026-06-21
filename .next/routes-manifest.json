@@ -108,10 +108,22 @@
       "namedRegex": "^/api/escritorio/hand(?:/)?$"
     },
     {
+      "page": "/api/escritorio/meeting",
+      "regex": "^/api/escritorio/meeting(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/escritorio/meeting(?:/)?$"
+    },
+    {
       "page": "/api/escritorio/move",
       "regex": "^/api/escritorio/move(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/escritorio/move(?:/)?$"
+    },
+    {
+      "page": "/api/escritorio/screen",
+      "regex": "^/api/escritorio/screen(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/escritorio/screen(?:/)?$"
     },
     {
       "page": "/api/escritorio/signal",
