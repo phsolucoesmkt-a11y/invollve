@@ -120,9 +120,13 @@ export function CallProvider({ session, children }: { session: UserSession; chil
     pc.onnegotiationneeded = async () => {
       try {
         peer.makingOffer = true
-        await pc.setLocalDescription()
+        // Explicit createOffer for cross-browser support (Safari/older browsers
+        // don't support the arg-less setLocalDescription()).
+        const offer = await pc.createOffer()
+        await pc.setLocalDescription(offer)
         post('/api/escritorio/signal', { to: peerId, data: { description: pc.localDescription } })
-      } catch {} finally { peer.makingOffer = false }
+      } catch (err) { console.error('[OfficeCall] negotiation error', err) }
+      finally { peer.makingOffer = false }
     }
     pc.onicecandidate = (e) => { if (e.candidate) post('/api/escritorio/signal', { to: peerId, data: { candidate: e.candidate } }) }
     pc.ontrack = (e) => { peer.stream.addTrack(e.track); refreshRemotes() }
@@ -175,13 +179,15 @@ export function CallProvider({ session, children }: { session: UserSession; chil
           if (!polite && offerCollision) return
           await pc.setRemoteDescription(data.description)
           if (data.description.type === 'offer') {
-            await pc.setLocalDescription()
+            // Explicit createAnswer for cross-browser support (Safari etc.).
+            const answer = await pc.createAnswer()
+            await pc.setLocalDescription(answer)
             post('/api/escritorio/signal', { to: from, data: { description: pc.localDescription } })
           }
         } else if (data.candidate) {
-          try { await pc.addIceCandidate(data.candidate) } catch {}
+          try { await pc.addIceCandidate(data.candidate) } catch (err) { console.warn('[OfficeCall] ICE add failed', err) }
         }
-      } catch {}
+      } catch (err) { console.error('[OfficeCall] signal handling error', err) }
     })
 
     return () => {
