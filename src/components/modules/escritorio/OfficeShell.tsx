@@ -3,8 +3,8 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
 import { UserSession } from '@/lib/auth'
 import OfficeCanvas from './OfficeCanvas'
-import MeetingRoom from './MeetingRoom'
 import { CallProvider, CallControls, OfficeTiles } from './OfficeCall'
+import DailyRoom from '@/components/DailyRoom'
 import AvatarSelect, { shouldShowAvatarSelect, getAvatarColor } from './AvatarSelect'
 
 const OFFICE_PATH = '/dashboard/escritorio'
@@ -95,12 +95,23 @@ export default function OfficeShell({ session, children }: { session: UserSessio
     <CallProvider session={session}>
       <div className="relative flex-1 h-screen overflow-hidden">
         {inMeeting ? (
-          <MeetingRoom session={session} avatarColor={avatarColor} onLeave={leaveMeeting} />
+          <div className="absolute inset-0 z-40 flex flex-col bg-[#0a0a0f]">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 flex-shrink-0">
+              <span className="text-sm font-semibold text-white">📹 Sala de reunião — Escritório</span>
+              <button onClick={leaveMeeting}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-white/10 hover:bg-white/20 transition">
+                Sair da reunião
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <DailyRoom room="invollve-escritorio" displayName={session.name} onLeave={leaveMeeting} />
+            </div>
+          </div>
         ) : (
           <>
             {/* Persistent office canvas */}
             <div className={`absolute inset-0 transition-all duration-300 ${overlayOpen ? 'scale-[0.99] blur-[2px] brightness-[0.55]' : ''}`}>
-              <OfficeCanvas session={session} active={!overlayOpen && !showSelect} avatarColor={avatarColor} />
+              <OfficeCanvas session={session} active={!overlayOpen && !showSelect} avatarColor={avatarColor} onEnterMeeting={enterMeeting} />
             </div>
 
             {/* Floating module window */}

@@ -160,7 +160,7 @@ function inMeetingRoom(x: number, y: number) {
   return x > MR.x + WT && x < MR.x + MR.w - WT && y > MR.y + WT && y < MR.y + MR.h - WT
 }
 
-export default function OfficeCanvas({ session, active = true, avatarColor }: { session: UserSession; active?: boolean; avatarColor?: string }) {
+export default function OfficeCanvas({ session, active = true, avatarColor, onEnterMeeting }: { session: UserSession; active?: boolean; avatarColor?: string; onEnterMeeting?: () => void }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animRef = useRef(0)
@@ -174,6 +174,10 @@ export default function OfficeCanvas({ session, active = true, avatarColor }: { 
   const pos = useRef({ x: 400, y: 170 })
   const face = useRef<Facing>('down')
   const lastSent = useRef({ x: -999, y: -999, status: '', t: 0 })
+  // Walking into the meeting room opens the call automatically (fires once on entry).
+  const wasInRoom = useRef(false)
+  const onEnterRef = useRef(onEnterMeeting)
+  onEnterRef.current = onEnterMeeting
 
   const othersRef = useRef<NetPlayer[]>([])
   const frame = useRef(0)
@@ -369,6 +373,11 @@ export default function OfficeCanvas({ session, active = true, avatarColor }: { 
           }).catch(() => {})
         }
       }
+
+      // walking into the meeting room opens the call automatically (once on entry)
+      const nowInRoom = activeRef.current && inMeetingRoom(pos.current.x, pos.current.y)
+      if (nowInRoom && !wasInRoom.current) onEnterRef.current?.()
+      wasInRoom.current = nowInRoom
 
       // proximity for voice chat
       const mp = pos.current

@@ -4,9 +4,20 @@ import { useEffect, useState } from 'react'
 const emptyForm = { title: '', description: '', meet_link: '', start_time: '', end_time: '', attendees: '', client_id: '' }
 
 function generateMeetLink() {
-  const chars = 'abcdefghijklmnopqrstuvwxyz'
-  const seg = () => Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-  return `https://meet.google.com/${seg()}-${seg()}-${seg()}`
+  // Gera uma sala própria do sistema (Daily), não um link externo do Google Meet.
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  const seg = () => Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+  return `invollve-${seg()}-${seg()}-${seg()}`
+}
+
+// Monta o caminho de entrada na call a partir do que está salvo em meet_link.
+// Suporta tanto as novas salas do sistema quanto links externos antigos.
+function meetingEntry(meetLink: string): { href: string; external: boolean } | null {
+  if (!meetLink) return null
+  if (meetLink.startsWith('http://') || meetLink.startsWith('https://')) {
+    return { href: meetLink, external: true }
+  }
+  return { href: `/dashboard/call/${encodeURIComponent(meetLink)}`, external: false }
 }
 
 export default function ReunioesPage() {
@@ -60,9 +71,12 @@ export default function ReunioesPage() {
             <div className="space-y-3">
               <input placeholder="Título *" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm" />
               <textarea placeholder="Descrição / Pauta" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm" rows={2} />
-              <div className="flex gap-2 items-center">
-                <input placeholder="Link do Google Meet" value={form.meet_link} onChange={e => setForm(f => ({ ...f, meet_link: e.target.value }))} className="flex-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm" />
-                <button type="button" onClick={() => setForm(f => ({ ...f, meet_link: generateMeetLink() }))} className="px-3 py-2 rounded-xl bg-white/5 text-zinc-400 hover:text-white text-xs">Gerar</button>
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">Sala da reunião (dentro do sistema)</label>
+                <div className="flex gap-2 items-center">
+                  <input placeholder="Clique em Gerar para criar a sala" value={form.meet_link} onChange={e => setForm(f => ({ ...f, meet_link: e.target.value }))} className="flex-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm" />
+                  <button type="button" onClick={() => setForm(f => ({ ...f, meet_link: generateMeetLink() }))} className="px-3 py-2 rounded-xl bg-white/5 text-zinc-400 hover:text-white text-xs">Gerar</button>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -126,12 +140,17 @@ function MeetingCard({ meeting: m, onDelete, onEdit }: any) {
         {m.description && <p className="text-xs text-zinc-500 mt-1">{m.description}</p>}
       </div>
       <div className="flex flex-col gap-2">
-        {m.meet_link && (
-          <a href={m.meet_link} target="_blank" rel="noopener noreferrer"
-            className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 transition">
-            Entrar no Meet
-          </a>
-        )}
+        {(() => {
+          const entry = meetingEntry(m.meet_link)
+          if (!entry) return null
+          return (
+            <a href={entry.href}
+              {...(entry.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 transition text-center">
+              Entrar na reunião
+            </a>
+          )
+        })()}
         <div className="flex gap-1">
           <button onClick={onEdit} className="text-xs text-zinc-500 hover:text-white px-2 py-1 rounded bg-white/5">✏️</button>
           <button onClick={() => onDelete(m.id)} className="text-xs text-zinc-500 hover:text-red-400 px-2 py-1 rounded bg-white/5">🗑️</button>
