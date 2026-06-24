@@ -48,6 +48,7 @@ export default function OfficeShell({ session, children }: { session: UserSessio
   const [avatarColor, setAvatarColor] = useState<string>('')
   const [inMeeting, setInMeeting] = useState(false)
   const [inPrivate, setInPrivate] = useState(false)
+  const [pipMin, setPipMin] = useState(false) // call manually minimized to a corner
 
   useEffect(() => {
     setAvatarColor(getAvatarColor(session.role))
@@ -66,11 +67,8 @@ export default function OfficeShell({ session, children }: { session: UserSessio
     return () => clearInterval(id)
   }, [showSelect, inMeeting, inPrivate, overlayOpen, avatarColor])
 
-  // Leaving the office area (opening another module) drops you out of any call.
-  useEffect(() => {
-    if (inMeeting && overlayOpen) { post('/api/escritorio/meeting', { join: false }); setInMeeting(false) }
-    if (inPrivate && overlayOpen) setInPrivate(false)
-  }, [inMeeting, inPrivate, overlayOpen])
+  // Opening another module no longer leaves the call — it shrinks to a PiP
+  // (handled in render). The call only ends when the user clicks "Sair".
 
   // Leave the meeting if the tab is closed.
   useEffect(() => {
@@ -85,99 +83,103 @@ export default function OfficeShell({ session, children }: { session: UserSessio
   const enterMeeting = useCallback(() => {
     router.push(OFFICE_PATH)
     post('/api/escritorio/meeting', { join: true })
-    setInMeeting(true)
+    setInPrivate(false); setPipMin(false); setInMeeting(true)
   }, [router])
 
-  const leaveMeeting = useCallback(() => {
-    post('/api/escritorio/meeting', { join: false })
-    setInMeeting(false)
-  }, [])
-
   // Private 1-on-1: opens a separate Daily room limited to 2 people.
-  const enterPrivate = useCallback(() => { router.push(OFFICE_PATH); setInPrivate(true) }, [router])
-  const leavePrivate = useCallback(() => { setInPrivate(false) }, [])
+  const enterPrivate = useCallback(() => {
+    router.push(OFFICE_PATH)
+    setInMeeting(false); setPipMin(false); setInPrivate(true)
+  }, [router])
+
+  // Shared call helpers (the call can be full-screen or a floating PiP).
+  const inCall = inMeeting || inPrivate
+  const callPip = inCall && (overlayOpen || pipMin) // PiP when on another module, or minimized
+  const leaveCall = useCallback(() => {
+    setPipMin(false)
+    post('/api/escritorio/meeting', { join: false })
+    setInMeeting(false); setInPrivate(false)
+  }, [])
+  const expandCall = useCallback(() => { setPipMin(false); router.push(OFFICE_PATH) }, [router])
 
   return (
     <CallProvider session={session}>
       <div className="relative flex-1 h-screen overflow-hidden">
-        {inMeeting ? (
-          <div className="absolute inset-0 z-40 flex flex-col bg-[#0a0a0f]">
-            <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 flex-shrink-0">
-              <span className="text-sm font-semibold text-white">📹 Sala de reunião — Escritório</span>
-              <button onClick={leaveMeeting}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-white/10 hover:bg-white/20 transition">
-                Sair da reunião
-              </button>
-            </div>
-            <div className="flex-1 min-h-0">
-              <DailyRoom room="invollve-escritorio" displayName={session.name} onLeave={leaveMeeting} />
-            </div>
-          </div>
-        ) : inPrivate ? (
-          <div className="absolute inset-0 z-40 flex flex-col bg-[#0a0a0f]">
-            <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 flex-shrink-0">
-              <span className="text-sm font-semibold text-white">🔒 Reunião 1a1 — privada (máx. 2)</span>
-              <button onClick={leavePrivate}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-white/10 hover:bg-white/20 transition">
-                Sair
-              </button>
-            </div>
-            <div className="flex-1 min-h-0">
-              <DailyRoom room="invollve-1a1" displayName={session.name} max={2} onLeave={leavePrivate} />
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* Persistent office canvas */}
-            <div className={`absolute inset-0 transition-all duration-300 ${overlayOpen ? 'scale-[0.99] blur-[2px] brightness-[0.55]' : ''}`}>
-              <OfficeCanvas session={session} active={!overlayOpen && !showSelect} avatarColor={avatarColor} onEnterMeeting={enterMeeting} onEnterPrivate={enterPrivate} />
-            </div>
+        {/* Office canvas (paused while in a call) */}
+        <div className={`absolute inset-0 transition-all duration-300 ${overlayOpen ? 'scale-[0.99] blur-[2px] brightness-[0.55]' : ''}`}>
+          <OfficeCanvas session={session} active={!overlayOpen && !showSelect && !inCall} avatarColor={avatarColor} onEnterMeeting={enterMeeting} onEnterPrivate={enterPrivate} />
+        </div>
 
-            {/* Floating module window */}
-            {overlayOpen && (
-              <div className="absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-6" onClick={closeWindow}>
-                <div
-                  className="flex flex-col w-full h-full max-w-[1400px] rounded-2xl border border-[var(--border-2)] shadow-2xl overflow-hidden backdrop-blur-xl"
-                  style={{ background: 'linear-gradient(180deg, rgba(20,12,38,0.96), rgba(10,6,19,0.96))' }}
-                  onClick={e => e.stopPropagation()}
+        {/* Floating module window */}
+        {overlayOpen && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center p-3 sm:p-6" onClick={closeWindow}>
+            <div
+              className="flex flex-col w-full h-full max-w-[1400px] rounded-2xl border border-[var(--border-2)] shadow-2xl overflow-hidden backdrop-blur-xl"
+              style={{ background: 'linear-gradient(180deg, rgba(20,12,38,0.96), rgba(10,6,19,0.96))' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[var(--border)] bg-white/[0.02] flex-shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--grad)' }} />
+                  <span className="text-sm font-semibold text-white">{titleFor(pathname)}</span>
+                </div>
+                <button
+                  onClick={closeWindow}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--muted)] hover:text-white bg-white/[0.04] hover:bg-white/[0.09] border border-[var(--border)] transition-all"
                 >
-                  <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[var(--border)] bg-white/[0.02] flex-shrink-0">
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--grad)' }} />
-                      <span className="text-sm font-semibold text-white">{titleFor(pathname)}</span>
-                    </div>
-                    <button
-                      onClick={closeWindow}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--muted)] hover:text-white bg-white/[0.04] hover:bg-white/[0.09] border border-[var(--border)] transition-all"
-                    >
-                      🏢 Voltar ao escritório
-                    </button>
-                  </div>
-                  <div className="flex-1 overflow-auto p-6">{children}</div>
-                </div>
+                  🏢 Voltar ao escritório
+                </button>
               </div>
-            )}
+              <div className="flex-1 overflow-auto p-6">{children}</div>
+            </div>
+          </div>
+        )}
 
-            {/* Avatar selection overlay (once per session) */}
-            {showSelect && <AvatarSelect session={session} onEnter={handleEnter} />}
+        {/* Avatar selection overlay (once per session) */}
+        {showSelect && <AvatarSelect session={session} onEnter={handleEnter} />}
 
-            {/* Proximity A/V in the office itself: a mic/cam dock + tiles of the
-                people connected near you (with live connection status), plus the
-                button to step into the full meeting room. */}
-            {!showSelect && !overlayOpen && (
-              <>
-                <OfficeTiles />
-                <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-end gap-3">
-                  <CallControls variant="office" />
-                  <button onClick={enterMeeting} title="Entrar na reunião"
-                    className="h-11 px-5 rounded-full flex items-center gap-2 text-white text-sm font-semibold shadow-xl transition-all hover:brightness-110 active:scale-95"
-                    style={{ background: 'var(--grad)' }}>
-                    📹 Entrar na reunião
-                  </button>
-                </div>
-              </>
-            )}
+        {/* Office dock + enter-meeting button — only when not already in a call */}
+        {!showSelect && !overlayOpen && !inCall && (
+          <>
+            <OfficeTiles />
+            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-end gap-3">
+              <CallControls variant="office" />
+              <button onClick={enterMeeting} title="Entrar na reunião"
+                className="h-11 px-5 rounded-full flex items-center gap-2 text-white text-sm font-semibold shadow-xl transition-all hover:brightness-110 active:scale-95"
+                style={{ background: 'var(--grad)' }}>
+                📹 Entrar na reunião
+              </button>
+            </div>
           </>
+        )}
+
+        {/* THE CALL — persistent while in a call. Full-screen on the office, or a
+            floating PiP when you open another section, so the call NEVER drops.
+            The Daily iframe stays mounted; only its container resizes. */}
+        {inCall && (
+          <div className={callPip
+            ? 'fixed bottom-4 right-4 z-50 w-[340px] h-[230px] rounded-xl overflow-hidden border border-white/15 shadow-2xl flex flex-col bg-[#0a0a0f]'
+            : 'absolute inset-0 z-40 flex flex-col bg-[#0a0a0f]'}>
+            <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-white/10 flex-shrink-0">
+              <span className="text-xs font-semibold text-white truncate">
+                {inPrivate ? '🔒 Reunião 1a1' : '📹 Sala de reunião'}
+              </span>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {callPip ? (
+                  <button onClick={expandCall} title="Expandir"
+                    className="px-2.5 py-1 rounded-lg text-xs font-medium text-white bg-white/10 hover:bg-white/20 transition">Expandir</button>
+                ) : (
+                  <button onClick={() => setPipMin(true)} title="Minimizar (continua em janelinha)"
+                    className="px-2.5 py-1 rounded-lg text-xs font-medium text-white bg-white/10 hover:bg-white/20 transition">Minimizar</button>
+                )}
+                <button onClick={leaveCall} title="Sair da chamada"
+                  className="px-2.5 py-1 rounded-lg text-xs font-semibold text-white bg-red-600 hover:bg-red-500 transition">Sair</button>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0">
+              <DailyRoom room={inPrivate ? 'invollve-1a1' : 'invollve-escritorio'} max={inPrivate ? 2 : undefined} displayName={session.name} />
+            </div>
+          </div>
         )}
       </div>
     </CallProvider>
