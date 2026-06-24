@@ -55,7 +55,15 @@ const DESKS = [
 ]
 // One seat in front of each desk (person sits facing up toward their monitor).
 const OFFICE_SEATS = DESKS.map(d => ({ x: d.x + 30, y: d.y + 60 }))
-const PLANTS = [ { x: 246, y: 28 }, { x: 610, y: 150 }, { x: 24, y: 360 }, { x: 300, y: 380 }, { x: 610, y: 360 } ]
+const PLANTS = [ { x: 246, y: 28 }, { x: 610, y: 150 }, { x: 300, y: 380 }, { x: 610, y: 360 } ]
+
+// Private 1-on-1 table (2 chairs), just below the meeting room. Walking into it
+// opens a private Daily call limited to 2 people.
+const ONE_RECT: Rect = { x: 24, y: 196, w: 134, h: 74 }
+const ONE_C = { cx: ONE_RECT.x + ONE_RECT.w / 2, cy: ONE_RECT.y + ONE_RECT.h / 2 }
+function inOneOnOne(x: number, y: number) {
+  return x > ONE_RECT.x && x < ONE_RECT.x + ONE_RECT.w && y > ONE_RECT.y && y < ONE_RECT.y + ONE_RECT.h
+}
 
 const ROLE_SHIRT: Record<string, string> = {
   socio: '#f0a23a', gestor_trafego: '#4f8de8', social_media: '#e8804f', designer: '#b06fd0', staff: '#7a8290',
@@ -98,6 +106,18 @@ function drawMeetingTable(c: CanvasRenderingContext2D) {
   ell(c, MT.cx, MT.cy + 4, 72, 40, '#cfa06c')
   ell(c, MT.cx, MT.cy, 72, 38, '#d8ab74')
   ell(c, MT.cx - 8, MT.cy - 7, 38, 16, 'rgba(226,187,138,0.6)')
+}
+function drawOneOnOne(c: CanvasRenderingContext2D) {
+  const { cx, cy } = ONE_C
+  // soft private rug
+  fillRR(c, ONE_RECT.x, ONE_RECT.y, ONE_RECT.w, ONE_RECT.h, 16, 'rgba(124,77,255,0.10)')
+  // two facing chairs (left & right of the table)
+  fillRR(c, cx - 44, cy - 9, 22, 18, 5, '#525b67')
+  fillRR(c, cx + 22, cy - 9, 22, 18, 5, '#525b67')
+  // small round table
+  ell(c, cx, cy + 3, 24, 14, '#bd8f57')
+  ell(c, cx, cy, 24, 13, '#d8ab74')
+  ell(c, cx - 6, cy - 5, 12, 6, 'rgba(255,255,255,0.18)')
 }
 function drawWalls(c: CanvasRenderingContext2D) {
   WALLS.forEach(w => {
@@ -160,7 +180,7 @@ function inMeetingRoom(x: number, y: number) {
   return x > MR.x + WT && x < MR.x + MR.w - WT && y > MR.y + WT && y < MR.y + MR.h - WT
 }
 
-export default function OfficeCanvas({ session, active = true, avatarColor, onEnterMeeting }: { session: UserSession; active?: boolean; avatarColor?: string; onEnterMeeting?: () => void }) {
+export default function OfficeCanvas({ session, active = true, avatarColor, onEnterMeeting, onEnterPrivate }: { session: UserSession; active?: boolean; avatarColor?: string; onEnterMeeting?: () => void; onEnterPrivate?: () => void }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animRef = useRef(0)
@@ -174,10 +194,16 @@ export default function OfficeCanvas({ session, active = true, avatarColor, onEn
   const pos = useRef({ x: 400, y: 170 })
   const face = useRef<Facing>('down')
   const lastSent = useRef({ x: -999, y: -999, status: '', t: 0 })
-  // Walking into the meeting room opens the call automatically (fires once on entry).
+  // Walking into the meeting room / private table opens the call (fires once on entry).
   const wasInRoom = useRef(false)
+  const wasInPrivate = useRef(false)
   const onEnterRef = useRef(onEnterMeeting)
   onEnterRef.current = onEnterMeeting
+  const onEnterPrivateRef = useRef(onEnterPrivate)
+  onEnterPrivateRef.current = onEnterPrivate
+  // Smoothed render positions for OTHER players, so their walking looks fluid
+  // even though their position arrives in steps over the network.
+  const interp = useRef(new Map<number, { x: number; y: number; facing: Facing }>())
 
   const othersRef = useRef<NetPlayer[]>([])
   const frame = useRef(0)
@@ -195,7 +221,7 @@ export default function OfficeCanvas({ session, active = true, avatarColor, onEn
 
   const myStatus = useCallback(() => {
     if (!activeRef.current) return 'ocupado' as const
-    if (inMeetingRoom(pos.current.x, pos.current.y)) return 'reuniao' as const
+    if (inMeetingRoom(pos.current.x, pos.current.y) || inOneOnOne(pos.current.x, pos.current.y)) return 'reuniao' as const
     return 'online' as const
   }, [])
 
@@ -218,6 +244,7 @@ export default function OfficeCanvas({ session, active = true, avatarColor, onEn
     DESKS.forEach(d => drawDesk(c, d.x, d.y))
     PLANTS.forEach(p => drawPlant(c, p.x, p.y))
     drawMeetingTable(c)
+    drawOneOnOne(c)
 
     const now = Date.now()
     // People at their fixed chairs: office workers at their desk, and anyone in
@@ -232,8 +259,9 @@ export default function OfficeCanvas({ session, active = true, avatarColor, onEn
         const ms = MEETING_SEATS[p.meetingSeat]; if (!ms) return
         people.push({ id: p.id, x: ms.x, y: ms.y, facing: ms.facing, shirt: shirtCol, hair, name, status: 'reuniao', hand: !!p.hand, me: false })
       } else {
-        const seat = OFFICE_SEATS[p.seat]; if (!seat) return
-        people.push({ id: p.id, x: seat.x, y: seat.y, facing: 'up', shirt: shirtCol, hair, name, status: p.status, hand: !!p.hand, me: false })
+        // Draw at the smoothed real position (where they actually walked to).
+        const r = interp.current.get(p.id) ?? { x: p.x, y: p.y, facing: 'down' as Facing }
+        people.push({ id: p.id, x: r.x, y: r.y, facing: r.facing, shirt: shirtCol, hair, name, status: p.status, hand: !!p.hand, me: false })
       }
     })
     {
@@ -263,6 +291,14 @@ export default function OfficeCanvas({ session, active = true, avatarColor, onEn
     const lw = c.measureText(lbl).width + 16
     fillRR(c, MR.x + MR.w / 2 - lw / 2, MR.y + 10, lw, 17, 8, 'rgba(51,65,79,0.9)')
     c.fillStyle = '#fff'; c.fillText(lbl, MR.x + MR.w / 2, MR.y + 22)
+
+    // 1-on-1 private table label (count by who is standing in the area)
+    const oneCount = othersRef.current.filter(p => now - p.t < 12000 && !p.meeting && inOneOnOne(p.x, p.y)).length
+      + (inOneOnOne(pos.current.x, pos.current.y) ? 1 : 0)
+    const oneLbl = oneCount > 0 ? `Reunião 1a1 · ${oneCount}/2` : 'Reunião 1a1 · privada'
+    const olw = c.measureText(oneLbl).width + 16
+    fillRR(c, ONE_C.cx - olw / 2, ONE_RECT.y - 4, olw, 16, 8, 'rgba(90,60,160,0.92)')
+    c.fillStyle = '#fff'; c.fillText(oneLbl, ONE_C.cx, ONE_RECT.y + 7)
 
     // --- screen-space HUD ---
     c.setTransform(1, 0, 0, 1, 0, 0)
@@ -359,10 +395,11 @@ export default function OfficeCanvas({ session, active = true, avatarColor, onEn
           else if (dy < 0) face.current = 'up'
           else face.current = 'down'
         }
-        // POST position every ~100ms when moving, or every 3s as heartbeat
+        // POST position at most ~10x/s while moving (kept light for the shared host),
+        // or every 3s as a heartbeat. Smoothing on the receiver hides the gaps.
         const ls = lastSent.current
         const status = myStatus()
-        const moved = Math.abs(pos.current.x - ls.x) > 1 || Math.abs(pos.current.y - ls.y) > 1
+        const moved = (Math.abs(pos.current.x - ls.x) > 1 || Math.abs(pos.current.y - ls.y) > 1) && now - ls.t > 90
         const stale = now - ls.t > 3000
         if (moved || stale || status !== ls.status) {
           lastSent.current = { x: pos.current.x, y: pos.current.y, status, t: now }
@@ -374,15 +411,32 @@ export default function OfficeCanvas({ session, active = true, avatarColor, onEn
         }
       }
 
-      // walking into the meeting room opens the call automatically (once on entry)
+      // walking into the meeting room / 1-on-1 table opens the call (once on entry)
       const nowInRoom = activeRef.current && inMeetingRoom(pos.current.x, pos.current.y)
       if (nowInRoom && !wasInRoom.current) onEnterRef.current?.()
       wasInRoom.current = nowInRoom
+      const nowInPrivate = activeRef.current && inOneOnOne(pos.current.x, pos.current.y)
+      if (nowInPrivate && !wasInPrivate.current) onEnterPrivateRef.current?.()
+      wasInPrivate.current = nowInPrivate
 
-      // proximity for voice chat
+      // smooth OTHER players toward their last-known position (fluid walking)
+      const im = interp.current
+      const liveIds = new Set<number>()
+      othersRef.current.forEach(p => {
+        if (now - p.t > 12000 || p.meeting) return
+        liveIds.add(p.id)
+        const cur = im.get(p.id) ?? { x: p.x, y: p.y, facing: 'down' as Facing }
+        const ddx = p.x - cur.x, ddy = p.y - cur.y
+        let facing = cur.facing
+        if (Math.abs(ddx) > 0.4 || Math.abs(ddy) > 0.4) facing = Math.abs(ddx) > Math.abs(ddy) ? (ddx < 0 ? 'left' : 'right') : (ddy < 0 ? 'up' : 'down')
+        im.set(p.id, { x: cur.x + ddx * 0.25, y: cur.y + ddy * 0.25, facing })
+      })
+      for (const id of im.keys()) if (!liveIds.has(id)) im.delete(id)
+
+      // proximity for voice chat (using real, smoothed positions)
       const mp = pos.current
       const others = othersRef.current.filter(p => now - p.t < 12000 && !p.meeting)
-      const posOf = (p: NetPlayer) => p.seat >= 0 ? (OFFICE_SEATS[p.seat] ?? { x: p.x, y: p.y }) : { x: p.x, y: p.y }
+      const posOf = (p: NetPlayer) => { const r = im.get(p.id); return r ? { x: r.x, y: r.y } : { x: p.x, y: p.y } }
       const dist2 = (p: NetPlayer) => { const s = posOf(p); return (s.x - mp.x) ** 2 + (s.y - mp.y) ** 2 }
       const near = others.filter(p => dist2(p) < CHAT_RADIUS ** 2)
       const audioNear = others.filter(p => dist2(p) < AUDIO_RADIUS ** 2)

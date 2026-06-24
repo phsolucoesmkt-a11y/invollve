@@ -12,10 +12,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'DAILY_API_KEY não configurada no servidor' }, { status: 500 })
   }
 
-  const { room } = await req.json()
+  const { room, max } = await req.json()
   if (!room || typeof room !== 'string') {
     return NextResponse.json({ error: 'Sala inválida' }, { status: 400 })
   }
+  // Limite opcional de participantes (ex.: 2 para a reunião 1a1 privada).
+  const maxParticipants = typeof max === 'number' && max > 0 ? Math.floor(max) : undefined
   // Daily aceita só letras, números, hífen e underline no nome da sala.
   const name = room.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60) || 'reuniao'
 
@@ -45,6 +47,7 @@ export async function POST(req: NextRequest) {
           enable_chat: true,
           start_video_off: false,
           start_audio_off: false,
+          ...(maxParticipants ? { max_participants: maxParticipants } : {}),
         },
       }),
     })

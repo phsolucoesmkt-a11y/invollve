@@ -47,6 +47,7 @@ export default function OfficeShell({ session, children }: { session: UserSessio
   const [showSelect, setShowSelect] = useState(false)
   const [avatarColor, setAvatarColor] = useState<string>('')
   const [inMeeting, setInMeeting] = useState(false)
+  const [inPrivate, setInPrivate] = useState(false)
 
   useEffect(() => {
     setAvatarColor(getAvatarColor(session.role))
@@ -57,18 +58,19 @@ export default function OfficeShell({ session, children }: { session: UserSessio
   useEffect(() => {
     if (showSelect) return
     const beat = () => {
-      const status = inMeeting ? 'reuniao' : overlayOpen ? 'ocupado' : 'online'
+      const status = (inMeeting || inPrivate) ? 'reuniao' : overlayOpen ? 'ocupado' : 'online'
       post('/api/escritorio/move', { status, avatarColor: avatarColor || null })
     }
     beat()
     const id = setInterval(beat, 3000)
     return () => clearInterval(id)
-  }, [showSelect, inMeeting, overlayOpen, avatarColor])
+  }, [showSelect, inMeeting, inPrivate, overlayOpen, avatarColor])
 
-  // Leaving the office area (opening another module) drops you out of the meeting.
+  // Leaving the office area (opening another module) drops you out of any call.
   useEffect(() => {
     if (inMeeting && overlayOpen) { post('/api/escritorio/meeting', { join: false }); setInMeeting(false) }
-  }, [inMeeting, overlayOpen])
+    if (inPrivate && overlayOpen) setInPrivate(false)
+  }, [inMeeting, inPrivate, overlayOpen])
 
   // Leave the meeting if the tab is closed.
   useEffect(() => {
@@ -91,6 +93,10 @@ export default function OfficeShell({ session, children }: { session: UserSessio
     setInMeeting(false)
   }, [])
 
+  // Private 1-on-1: opens a separate Daily room limited to 2 people.
+  const enterPrivate = useCallback(() => { router.push(OFFICE_PATH); setInPrivate(true) }, [router])
+  const leavePrivate = useCallback(() => { setInPrivate(false) }, [])
+
   return (
     <CallProvider session={session}>
       <div className="relative flex-1 h-screen overflow-hidden">
@@ -107,11 +113,24 @@ export default function OfficeShell({ session, children }: { session: UserSessio
               <DailyRoom room="invollve-escritorio" displayName={session.name} onLeave={leaveMeeting} />
             </div>
           </div>
+        ) : inPrivate ? (
+          <div className="absolute inset-0 z-40 flex flex-col bg-[#0a0a0f]">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 flex-shrink-0">
+              <span className="text-sm font-semibold text-white">🔒 Reunião 1a1 — privada (máx. 2)</span>
+              <button onClick={leavePrivate}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-white/10 hover:bg-white/20 transition">
+                Sair
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <DailyRoom room="invollve-1a1" displayName={session.name} max={2} onLeave={leavePrivate} />
+            </div>
+          </div>
         ) : (
           <>
             {/* Persistent office canvas */}
             <div className={`absolute inset-0 transition-all duration-300 ${overlayOpen ? 'scale-[0.99] blur-[2px] brightness-[0.55]' : ''}`}>
-              <OfficeCanvas session={session} active={!overlayOpen && !showSelect} avatarColor={avatarColor} onEnterMeeting={enterMeeting} />
+              <OfficeCanvas session={session} active={!overlayOpen && !showSelect} avatarColor={avatarColor} onEnterMeeting={enterMeeting} onEnterPrivate={enterPrivate} />
             </div>
 
             {/* Floating module window */}

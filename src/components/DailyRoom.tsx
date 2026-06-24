@@ -7,9 +7,11 @@ import { useEffect, useState } from 'react'
 export default function DailyRoom({
   room,
   displayName,
+  max,
 }: {
   room: string
   displayName?: string
+  max?: number
   onLeave?: () => void
 }) {
   const [url, setUrl] = useState<string | null>(null)
@@ -20,7 +22,7 @@ export default function DailyRoom({
     fetch('/api/daily', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ room }),
+      body: JSON.stringify({ room, max }),
     })
       .then(async (r) => {
         const data = await r.json()
@@ -40,7 +42,7 @@ export default function DailyRoom({
     return () => {
       cancelled = true
     }
-  }, [room, displayName])
+  }, [room, displayName, max])
 
   if (error) {
     return (
