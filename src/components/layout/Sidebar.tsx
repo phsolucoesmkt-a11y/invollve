@@ -80,12 +80,13 @@ export default function Sidebar({ session }: { session: UserSession }) {
                 const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
                 return (
                   <Link key={item.href} href={item.href} title={collapsed ? item.label : undefined}
-                    className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${collapsed ? 'justify-center' : ''} ${active
+                    className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-[background-color,color] duration-300 ease-out ${collapsed ? 'justify-center' : ''} ${active
                       ? 'text-white font-medium'
                       : 'text-[var(--muted)] hover:text-white hover:bg-white/[0.045]'}`}
-                    style={active ? { background: 'rgba(157,123,255,0.12)' } : undefined}>
-                    {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full" style={{ background: 'var(--grad)' }} />}
-                    <span className={`flex-shrink-0 transition-colors ${active ? 'text-[var(--accent)]' : 'text-current opacity-80 group-hover:opacity-100'}`}>
+                    style={active ? { backgroundColor: 'rgba(157,123,255,0.16)' } : undefined}>
+                    {/* accent bar grows in smoothly on select, then sits locked */}
+                    <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full transition-all duration-300 ease-out origin-center ${active ? 'h-5 opacity-100 scale-y-100' : 'h-5 opacity-0 scale-y-0'}`} style={{ background: 'var(--grad)' }} />
+                    <span className={`flex-shrink-0 transition-colors duration-300 ${active ? 'text-[var(--accent)]' : 'text-current opacity-80 group-hover:opacity-100'}`}>
                       <Icon name={item.icon} />
                     </span>
                     {!collapsed && <span className="truncate">{item.label}</span>}

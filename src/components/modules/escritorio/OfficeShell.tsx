@@ -5,6 +5,7 @@ import { UserSession } from '@/lib/auth'
 import OfficeCanvas from './OfficeCanvas'
 import { CallProvider, CallControls, OfficeTiles } from './OfficeCall'
 import DailyRoom from '@/components/DailyRoom'
+import { subscribeOfficeStream } from '@/lib/officeStream'
 import AvatarSelect, { shouldShowAvatarSelect, getAvatarColor } from './AvatarSelect'
 
 const OFFICE_PATH = '/dashboard/escritorio'
@@ -49,6 +50,8 @@ export default function OfficeShell({ session, children }: { session: UserSessio
   const [inMeeting, setInMeeting] = useState(false)
   const [inPrivate, setInPrivate] = useState(false)
   const [pipMin, setPipMin] = useState(false) // call manually minimized to a corner
+  const [handUp, setHandUp] = useState(false)  // my hand raised in the call
+  const [raisedHands, setRaisedHands] = useState<{ id: number; name: string }[]>([]) // everyone with a raised hand
 
   useEffect(() => {
     setAvatarColor(getAvatarColor(session.role))
@@ -83,24 +86,45 @@ export default function OfficeShell({ session, children }: { session: UserSessio
   const enterMeeting = useCallback(() => {
     router.push(OFFICE_PATH)
     post('/api/escritorio/meeting', { join: true })
-    setInPrivate(false); setPipMin(false); setInMeeting(true)
+    setInPrivate(false); setPipMin(false); setHandUp(false); setInMeeting(true)
   }, [router])
 
   // Private 1-on-1: opens a separate Daily room limited to 2 people.
   const enterPrivate = useCallback(() => {
     router.push(OFFICE_PATH)
-    setInMeeting(false); setPipMin(false); setInPrivate(true)
+    setInMeeting(false); setPipMin(false); setHandUp(false); setInPrivate(true)
   }, [router])
 
   // Shared call helpers (the call can be full-screen or a floating PiP).
   const inCall = inMeeting || inPrivate
   const callPip = inCall && (overlayOpen || pipMin) // PiP when on another module, or minimized
   const leaveCall = useCallback(() => {
-    setPipMin(false)
+    setPipMin(false); setHandUp(false)
     post('/api/escritorio/meeting', { join: false })
     setInMeeting(false); setInPrivate(false)
   }, [])
   const expandCall = useCallback(() => { setPipMin(false); router.push(OFFICE_PATH) }, [router])
+
+  // Raise / lower my hand — reuses the office presence system, so everyone in
+  // the call (same app, same stream) sees the raised hand in real time. The
+  // server POST lives in an effect (not inside the state updater) so it fires
+  // exactly once per change.
+  const toggleHand = useCallback(() => setHandUp(prev => !prev), [])
+  const handSynced = useState(() => ({ first: true }))[0]
+  useEffect(() => {
+    if (handSynced.first) { handSynced.first = false; return }
+    post('/api/escritorio/hand', { raised: handUp })
+  }, [handUp, handSynced])
+
+  // While in a call, watch presence to show who currently has a hand raised.
+  useEffect(() => {
+    if (!inCall) { setRaisedHands([]); return }
+    const onPresence = (players: unknown[]) => {
+      const arr = players as { id: number; name?: string; hand?: boolean }[]
+      setRaisedHands(arr.filter(p => p.hand).map(p => ({ id: p.id, name: p.name || 'Alguém' })))
+    }
+    return subscribeOfficeStream({ presence: onPresence })
+  }, [inCall])
 
   return (
     <CallProvider session={session}>
@@ -157,14 +181,29 @@ export default function OfficeShell({ session, children }: { session: UserSessio
             floating PiP when you open another section, so the call NEVER drops.
             The Daily iframe stays mounted; only its container resizes. */}
         {inCall && (
-          <div className={callPip
-            ? 'fixed bottom-4 right-4 z-50 w-[340px] h-[230px] rounded-xl overflow-hidden border border-white/15 shadow-2xl flex flex-col bg-[#0a0a0f]'
-            : 'absolute inset-0 z-40 flex flex-col bg-[#0a0a0f]'}>
+          <div
+            className="absolute flex flex-col bg-[#0a0a0f] overflow-hidden border border-white/10"
+            style={{
+              // Single element that morphs between full-screen and the corner
+              // PiP, so the call visibly shrinks down with a smooth transition.
+              transitionProperty: 'top, left, width, height, border-radius, box-shadow',
+              transitionDuration: '440ms',
+              transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+              willChange: 'top, left, width, height',
+              ...(callPip
+                ? { top: 'calc(100% - 246px)', left: 'calc(100% - 356px)', width: 340, height: 230, borderRadius: 14, boxShadow: '0 24px 60px rgba(0,0,0,0.55)', zIndex: 50 }
+                : { top: 0, left: 0, width: '100%', height: '100%', borderRadius: 0, boxShadow: '0 0 0 0 rgba(0,0,0,0)', zIndex: 40 }),
+            }}
+          >
             <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-white/10 flex-shrink-0">
               <span className="text-xs font-semibold text-white truncate">
                 {inPrivate ? '🔒 Reunião 1a1' : '📹 Sala de reunião'}
               </span>
               <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button onClick={toggleHand} title={handUp ? 'Abaixar a mão' : 'Levantar a mão'}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition active:scale-95 ${handUp ? 'bg-amber-400 text-black shadow' : 'text-white bg-white/10 hover:bg-white/20'}`}>
+                  <span className={handUp ? 'inline-block animate-pulse' : ''}>✋</span>{callPip ? '' : (handUp ? ' Abaixar' : ' Levantar a mão')}
+                </button>
                 {callPip ? (
                   <button onClick={expandCall} title="Expandir"
                     className="px-2.5 py-1 rounded-lg text-xs font-medium text-white bg-white/10 hover:bg-white/20 transition">Expandir</button>
@@ -176,6 +215,12 @@ export default function OfficeShell({ session, children }: { session: UserSessio
                   className="px-2.5 py-1 rounded-lg text-xs font-semibold text-white bg-red-600 hover:bg-red-500 transition">Sair</button>
               </div>
             </div>
+            {raisedHands.length > 0 && (
+              <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-400/15 border-b border-amber-400/30 flex-shrink-0 overflow-hidden">
+                <span className="text-xs flex-shrink-0">✋</span>
+                <span className="text-amber-100 text-[11px] truncate">{raisedHands.map(h => h.name).join(', ')}</span>
+              </div>
+            )}
             <div className="flex-1 min-h-0">
               <DailyRoom room={inPrivate ? 'invollve-1a1' : 'invollve-escritorio'} max={inPrivate ? 2 : undefined} displayName={session.name} />
             </div>
