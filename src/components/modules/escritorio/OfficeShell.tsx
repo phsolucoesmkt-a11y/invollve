@@ -52,6 +52,7 @@ export default function OfficeShell({ session, children }: { session: UserSessio
   const [pipMin, setPipMin] = useState(false) // call manually minimized to a corner
   const [handUp, setHandUp] = useState(false)  // my hand raised in the call
   const [raisedHands, setRaisedHands] = useState<{ id: number; name: string }[]>([]) // everyone with a raised hand
+  const [callReset, setCallReset] = useState(0) // bumped on leave to move the avatar out of the room
 
   useEffect(() => {
     setAvatarColor(getAvatarColor(session.role))
@@ -102,6 +103,7 @@ export default function OfficeShell({ session, children }: { session: UserSessio
     setPipMin(false); setHandUp(false)
     post('/api/escritorio/meeting', { join: false })
     setInMeeting(false); setInPrivate(false)
+    setCallReset(n => n + 1) // step the avatar back to the open area
   }, [])
   const expandCall = useCallback(() => { setPipMin(false); router.push(OFFICE_PATH) }, [router])
 
@@ -131,7 +133,7 @@ export default function OfficeShell({ session, children }: { session: UserSessio
       <div className="relative flex-1 h-screen overflow-hidden">
         {/* Office canvas (paused while in a call) */}
         <div className={`absolute inset-0 transition-all duration-300 ${overlayOpen ? 'scale-[0.99] blur-[2px] brightness-[0.55]' : ''}`}>
-          <OfficeCanvas session={session} active={!overlayOpen && !showSelect && !inCall} avatarColor={avatarColor} onEnterMeeting={enterMeeting} onEnterPrivate={enterPrivate} />
+          <OfficeCanvas session={session} active={!overlayOpen && !showSelect && !inCall} avatarColor={avatarColor} onEnterMeeting={enterMeeting} onEnterPrivate={enterPrivate} resetKey={callReset} />
         </div>
 
         {/* Floating module window */}

@@ -180,7 +180,7 @@ function inMeetingRoom(x: number, y: number) {
   return x > MR.x + WT && x < MR.x + MR.w - WT && y > MR.y + WT && y < MR.y + MR.h - WT
 }
 
-export default function OfficeCanvas({ session, active = true, avatarColor, onEnterMeeting, onEnterPrivate }: { session: UserSession; active?: boolean; avatarColor?: string; onEnterMeeting?: () => void; onEnterPrivate?: () => void }) {
+export default function OfficeCanvas({ session, active = true, avatarColor, onEnterMeeting, onEnterPrivate, resetKey = 0 }: { session: UserSession; active?: boolean; avatarColor?: string; onEnterMeeting?: () => void; onEnterPrivate?: () => void; resetKey?: number }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animRef = useRef(0)
@@ -201,6 +201,17 @@ export default function OfficeCanvas({ session, active = true, avatarColor, onEn
   onEnterRef.current = onEnterMeeting
   const onEnterPrivateRef = useRef(onEnterPrivate)
   onEnterPrivateRef.current = onEnterPrivate
+
+  // When the user leaves a call, OfficeShell bumps resetKey so the character
+  // steps back to the open area — otherwise it'd be left standing inside the
+  // meeting room and get "stuck". The loop guard above stops a re-trigger.
+  useEffect(() => {
+    if (!resetKey) return
+    pos.current = { x: 400, y: 170 }
+    face.current = 'down'
+    wasInRoom.current = true
+    wasInPrivate.current = true
+  }, [resetKey])
   // Smoothed render positions for OTHER players, so their walking looks fluid
   // even though their position arrives in steps over the network.
   const interp = useRef(new Map<number, { x: number; y: number; facing: Facing }>())
@@ -412,12 +423,15 @@ export default function OfficeCanvas({ session, active = true, avatarColor, onEn
       }
 
       // walking into the meeting room / 1-on-1 table opens the call (once on entry)
+      // While in a call the canvas is inactive — keep these "true" so that
+      // leaving the call (canvas re-activates) does NOT re-fire the trigger
+      // just because the character is still standing inside the room.
       const nowInRoom = activeRef.current && inMeetingRoom(pos.current.x, pos.current.y)
       if (nowInRoom && !wasInRoom.current) onEnterRef.current?.()
-      wasInRoom.current = nowInRoom
+      wasInRoom.current = activeRef.current ? nowInRoom : true
       const nowInPrivate = activeRef.current && inOneOnOne(pos.current.x, pos.current.y)
       if (nowInPrivate && !wasInPrivate.current) onEnterPrivateRef.current?.()
-      wasInPrivate.current = nowInPrivate
+      wasInPrivate.current = activeRef.current ? nowInPrivate : true
 
       // smooth OTHER players toward their last-known position (fluid walking)
       const im = interp.current
