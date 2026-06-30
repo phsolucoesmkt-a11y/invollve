@@ -22,16 +22,33 @@ interface StreamStore {
   chat: Set<ChatFn>
   signal: Set<SignalFn>
   reaction: Set<ReactionFn>
+  poll: ReturnType<typeof setInterval> | null
 }
 
 const g = globalThis as unknown as { __officeStream?: StreamStore }
 const S: StreamStore = g.__officeStream ?? (g.__officeStream = {
-  es: null, refs: 0, presence: new Set(), chat: new Set(), signal: new Set(), reaction: new Set(),
+  es: null, refs: 0, presence: new Set(), chat: new Set(), signal: new Set(), reaction: new Set(), poll: null,
 })
 
 if (!S.reaction) S.reaction = new Set() // survive HMR with an older store shape
 
+// Polling fallback: keeps presence/movement live even when the SSE stalls on
+// the shared host. Short GET requests, fanned out to the same presence subs.
+const POLL_MS = 900
+function startPolling() {
+  if (S.poll) return
+  const tick = () => {
+    fetch('/api/escritorio/snapshot', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(a => { if (Array.isArray(a)) S.presence.forEach(fn => fn(a)) })
+      .catch(() => {})
+  }
+  tick()
+  S.poll = setInterval(tick, POLL_MS)
+}
+
 function open() {
+  startPolling()
   if (S.es) return
   const es = new EventSource('/api/escritorio/stream')
   es.onmessage = (e) => {
@@ -72,6 +89,10 @@ export function subscribeOfficeStream(h: OfficeStreamHandlers): () => void {
     if (h.signal) S.signal.delete(h.signal)
     if (h.reaction) S.reaction.delete(h.reaction)
     S.refs--
-    if (S.refs <= 0 && S.es) { S.es.close(); S.es = null; S.refs = 0 }
+    if (S.refs <= 0) {
+      if (S.es) { S.es.close(); S.es = null }
+      if (S.poll) { clearInterval(S.poll); S.poll = null }
+      S.refs = 0
+    }
   }
 }
