@@ -13,6 +13,7 @@
 type PresenceFn = (players: unknown[]) => void
 type ChatFn = (msg: unknown) => void
 type SignalFn = (from: number, data: unknown) => void
+type ReactionFn = (r: { id: number; name: string; emoji: string; t: number }) => void
 
 interface StreamStore {
   es: EventSource | null
@@ -20,12 +21,15 @@ interface StreamStore {
   presence: Set<PresenceFn>
   chat: Set<ChatFn>
   signal: Set<SignalFn>
+  reaction: Set<ReactionFn>
 }
 
 const g = globalThis as unknown as { __officeStream?: StreamStore }
 const S: StreamStore = g.__officeStream ?? (g.__officeStream = {
-  es: null, refs: 0, presence: new Set(), chat: new Set(), signal: new Set(),
+  es: null, refs: 0, presence: new Set(), chat: new Set(), signal: new Set(), reaction: new Set(),
 })
+
+if (!S.reaction) S.reaction = new Set() // survive HMR with an older store shape
 
 function open() {
   if (S.es) return
@@ -42,6 +46,9 @@ function open() {
       S.signal.forEach(fn => fn(from, data))
     } catch {}
   })
+  es.addEventListener('reaction', (e) => {
+    try { const r = JSON.parse((e as MessageEvent).data); S.reaction.forEach(fn => fn(r)) } catch {}
+  })
   S.es = es
 }
 
@@ -49,6 +56,7 @@ export interface OfficeStreamHandlers {
   presence?: PresenceFn
   chat?: ChatFn
   signal?: SignalFn
+  reaction?: ReactionFn
 }
 
 export function subscribeOfficeStream(h: OfficeStreamHandlers): () => void {
@@ -57,10 +65,12 @@ export function subscribeOfficeStream(h: OfficeStreamHandlers): () => void {
   if (h.presence) S.presence.add(h.presence)
   if (h.chat) S.chat.add(h.chat)
   if (h.signal) S.signal.add(h.signal)
+  if (h.reaction) S.reaction.add(h.reaction)
   return () => {
     if (h.presence) S.presence.delete(h.presence)
     if (h.chat) S.chat.delete(h.chat)
     if (h.signal) S.signal.delete(h.signal)
+    if (h.reaction) S.reaction.delete(h.reaction)
     S.refs--
     if (S.refs <= 0 && S.es) { S.es.close(); S.es = null; S.refs = 0 }
   }

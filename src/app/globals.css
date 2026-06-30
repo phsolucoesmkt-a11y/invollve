@@ -107,3 +107,11 @@ body {
   background: rgba(157,123,255,0.40);
   background-clip: padding-box;
 }
+
+/* Floating clap/reaction animation (Google-Meet style) */
+@keyframes clapFloat {
+  0%   { opacity: 0; transform: translateY(10px) scale(0.6); }
+  15%  { opacity: 1; transform: translateY(0) scale(1.1); }
+  30%  { transform: translateY(-6px) scale(1); }
+  100% { opacity: 0; transform: translateY(-90px) scale(0.9); }
+}

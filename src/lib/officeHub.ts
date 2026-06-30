@@ -99,6 +99,7 @@ export function snapshot(): OfficePlayer[] {
 const presenceFrame = () => `data: ${JSON.stringify(snapshot())}\n\n`
 const chatFrame = (m: ChatMsg) => `event: chat\ndata: ${JSON.stringify(m)}\n\n`
 const signalFrame = (from: number, data: unknown) => `event: signal\ndata: ${JSON.stringify({ from, data })}\n\n`
+const reactionFrame = (r: { id: number; name: string; emoji: string; t: number }) => `event: reaction\ndata: ${JSON.stringify(r)}\n\n`
 
 const emit = (frame: string) => { for (const e of hub.listeners) e.fn(frame) }
 
@@ -126,6 +127,12 @@ export function touch(id: number) {
 export function setHand(id: number, raised: boolean) {
   if (raised) hub.hands.add(id); else hub.hands.delete(id)
   broadcast()
+}
+
+// Transient reaction (e.g. clap 👏) — broadcast once, not stored. Everyone in
+// the office/call shows a brief floating emoji.
+export function emitReaction(id: number, name: string, emoji: string) {
+  emit(reactionFrame({ id, name, emoji, t: Date.now() }))
 }
 
 // Join/leave the meeting room. Joining grabs the lowest free meeting chair.

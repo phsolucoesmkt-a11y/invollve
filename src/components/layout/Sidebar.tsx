@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { UserSession, PERMISSIONS } from '@/lib/auth'
 
 type Item = { href: string; label: string; icon: IconName; module: string | null }
@@ -35,12 +35,16 @@ const NAV: { section: string | null; items: Item[] }[] = [
 export default function Sidebar({ session }: { session: UserSession }) {
   const pathname = usePathname()
   const router = useRouter()
-  const [collapsed, setCollapsed] = useState(false)
+  const [collapsed, setCollapsed] = useState(false) // desktop: rail mode
+  const [mobileOpen, setMobileOpen] = useState(false) // mobile: drawer over content
 
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' })
     router.push('/login')
   }
+
+  // Close the mobile drawer whenever the route changes.
+  useEffect(() => { setMobileOpen(false) }, [pathname])
 
   const can = (m: string | null) => m === null || PERMISSIONS[m]?.includes(session.role)
   const groups = NAV
@@ -48,22 +52,54 @@ export default function Sidebar({ session }: { session: UserSession }) {
     .filter(g => g.items.length > 0)
 
   const initials = session.name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+  // On mobile the drawer is always full-width (never the rail); rail is desktop-only.
+  const rail = collapsed
+  // Content compaction (icons-only) applies only to the desktop rail, never the
+  // mobile drawer — so an open drawer always shows full labels.
+  const compact = collapsed && !mobileOpen
 
   return (
-    <aside className={`relative flex flex-col border-r border-[var(--border)] transition-all duration-300 ${collapsed ? 'w-[68px]' : 'w-64'}`}
-      style={{ background: 'linear-gradient(180deg, #150c2a 0%, #0b0716 100%)' }}>
+    <>
+      {/* Mobile hamburger — floats over content, opens the drawer */}
+      <button onClick={() => setMobileOpen(true)} aria-label="Abrir menu"
+        className="lg:hidden fixed top-3 left-3 z-40 w-10 h-10 flex items-center justify-center rounded-xl bg-[#150c2a]/90 backdrop-blur border border-white/10 text-white shadow-lg active:scale-95">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+
+      {/* Backdrop behind the mobile drawer */}
+      {mobileOpen && (
+        <div onClick={() => setMobileOpen(false)} className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" />
+      )}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 lg:z-auto lg:relative flex flex-col border-r border-[var(--border)]
+          w-[84vw] max-w-[300px] ${rail ? 'lg:w-[68px]' : 'lg:w-64'}
+          transition-transform duration-300 lg:transition-[width] lg:duration-300
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
+        style={{ background: 'linear-gradient(180deg, #150c2a 0%, #0b0716 100%)' }}>
       {/* Header — full light panel with the brand logo in its original colours */}
       <div className="h-14 px-3 flex items-center justify-between gap-2 flex-shrink-0 shadow-sm" style={{ background: 'var(--brand-light)' }}>
-        {!collapsed
-          ? <img src="/logo.png" alt="Invollve" className="h-6 object-contain" />
-          : <div className="w-9 h-9 mx-auto rounded-xl flex items-center justify-center shadow-md" style={{ background: 'var(--grad)' }}>
-              <span className="text-white text-sm font-black">I</span>
-            </div>}
-        <button onClick={() => setCollapsed(c => !c)}
-          className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-[var(--brand-deep)] hover:bg-black/10 transition-all"
-          title={collapsed ? 'Expandir menu' : 'Recolher menu'}>
-          <Chevron dir={collapsed ? 'right' : 'left'} />
-        </button>
+        {compact ? (
+          // Rail mode: a single centered brand mark that expands on click (no cramped layout)
+          <button onClick={() => setCollapsed(false)} title="Expandir menu"
+            className="mx-auto w-9 h-9 rounded-xl flex items-center justify-center shadow-md active:scale-95" style={{ background: 'var(--grad)' }}>
+            <span className="text-white text-sm font-black">I</span>
+          </button>
+        ) : (
+          <>
+            <img src="/logo.png" alt="Invollve" className="h-6 object-contain" />
+            {/* desktop: collapse to rail */}
+            <button onClick={() => setCollapsed(true)} title="Recolher menu"
+              className="hidden lg:flex flex-shrink-0 w-7 h-7 items-center justify-center rounded-lg text-[var(--brand-deep)] hover:bg-black/10 transition-all">
+              <Chevron dir="left" />
+            </button>
+            {/* mobile: close drawer */}
+            <button onClick={() => setMobileOpen(false)} aria-label="Fechar menu"
+              className="lg:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-[var(--brand-deep)] hover:bg-black/10 transition-all">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+            </button>
+          </>
+        )}
       </div>
 
       {/* Nav */}
@@ -71,7 +107,7 @@ export default function Sidebar({ session }: { session: UserSession }) {
         {groups.map((group, gi) => (
           <div key={gi} className={gi > 0 ? 'mt-4' : ''}>
             {group.section && (
-              collapsed
+              compact
                 ? <div className="mx-3 my-2 border-t border-white/[0.06]" />
                 : <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]/60">{group.section}</p>
             )}
@@ -79,8 +115,8 @@ export default function Sidebar({ session }: { session: UserSession }) {
               {group.items.map(item => {
                 const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
                 return (
-                  <Link key={item.href} href={item.href} title={collapsed ? item.label : undefined}
-                    className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-[background-color,color] duration-300 ease-out ${collapsed ? 'justify-center' : ''} ${active
+                  <Link key={item.href} href={item.href} title={compact ? item.label : undefined} onClick={() => setMobileOpen(false)}
+                    className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-[background-color,color] duration-300 ease-out ${compact ? 'justify-center' : ''} ${active
                       ? 'text-white font-medium'
                       : 'text-[var(--muted)] hover:text-white hover:bg-white/[0.045]'}`}
                     style={active ? { backgroundColor: 'rgba(157,123,255,0.16)' } : undefined}>
@@ -89,7 +125,7 @@ export default function Sidebar({ session }: { session: UserSession }) {
                     <span className={`flex-shrink-0 transition-colors duration-300 ${active ? 'text-[var(--accent)]' : 'text-current opacity-80 group-hover:opacity-100'}`}>
                       <Icon name={item.icon} />
                     </span>
-                    {!collapsed && <span className="truncate">{item.label}</span>}
+                    {!compact && <span className="truncate">{item.label}</span>}
                   </Link>
                 )
               })}
@@ -100,23 +136,24 @@ export default function Sidebar({ session }: { session: UserSession }) {
 
       {/* Footer */}
       <div className="p-2 border-t border-[var(--border)] flex-shrink-0">
-        <div className={`flex items-center gap-2.5 px-2 py-2 mb-0.5 ${collapsed ? 'justify-center' : ''}`}>
+        <div className={`flex items-center gap-2.5 px-2 py-2 mb-0.5 ${compact ? 'justify-center' : ''}`}>
           <div className="w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-white text-[11px] font-bold shadow-md ring-2 ring-white/10"
             style={{ background: 'var(--grad)' }}>{initials}</div>
-          {!collapsed && (
+          {!compact && (
             <div className="min-w-0">
               <p className="text-sm font-medium text-white truncate leading-tight">{session.name}</p>
               <p className="text-xs text-[var(--muted)] truncate">{session.email}</p>
             </div>
           )}
         </div>
-        <button onClick={logout} title={collapsed ? 'Sair' : undefined}
-          className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-[var(--muted)] hover:bg-white/[0.045] hover:text-white transition-colors ${collapsed ? 'justify-center' : ''}`}>
+        <button onClick={logout} title={compact ? 'Sair' : undefined}
+          className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-[var(--muted)] hover:bg-white/[0.045] hover:text-white transition-colors ${compact ? 'justify-center' : ''}`}>
           <span className="flex-shrink-0 opacity-80"><Icon name="logout" /></span>
-          {!collapsed && <span>Sair</span>}
+          {!compact && <span>Sair</span>}
         </button>
       </div>
     </aside>
+    </>
   )
 }
 

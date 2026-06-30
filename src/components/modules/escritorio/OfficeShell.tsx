@@ -53,6 +53,7 @@ export default function OfficeShell({ session, children }: { session: UserSessio
   const [handUp, setHandUp] = useState(false)  // my hand raised in the call
   const [raisedHands, setRaisedHands] = useState<{ id: number; name: string }[]>([]) // everyone with a raised hand
   const [callReset, setCallReset] = useState(0) // bumped on leave to move the avatar out of the room
+  const [floatReacts, setFloatReacts] = useState<{ key: number; emoji: string; name: string }[]>([]) // transient claps floating up
 
   useEffect(() => {
     setAvatarColor(getAvatarColor(session.role))
@@ -118,14 +119,24 @@ export default function OfficeShell({ session, children }: { session: UserSessio
     post('/api/escritorio/hand', { raised: handUp })
   }, [handUp, handSynced])
 
-  // While in a call, watch presence to show who currently has a hand raised.
+  // Clap / reaction — broadcast a transient emoji to everyone (Google-Meet style).
+  const sendReaction = useCallback((emoji: string) => {
+    post('/api/escritorio/reaction', { emoji })
+  }, [])
+
+  // While in a call, watch presence (raised hands) and reactions (claps).
   useEffect(() => {
     if (!inCall) { setRaisedHands([]); return }
     const onPresence = (players: unknown[]) => {
       const arr = players as { id: number; name?: string; hand?: boolean }[]
       setRaisedHands(arr.filter(p => p.hand).map(p => ({ id: p.id, name: p.name || 'Alguém' })))
     }
-    return subscribeOfficeStream({ presence: onPresence })
+    const onReaction = (r: { id: number; name: string; emoji: string; t: number }) => {
+      const key = r.t + r.id + Math.random()
+      setFloatReacts(list => [...list, { key, emoji: r.emoji, name: r.name }])
+      setTimeout(() => setFloatReacts(list => list.filter(x => x.key !== key)), 2600)
+    }
+    return subscribeOfficeStream({ presence: onPresence, reaction: onReaction })
   }, [inCall])
 
   return (
@@ -202,9 +213,13 @@ export default function OfficeShell({ session, children }: { session: UserSessio
                 {inPrivate ? '🔒 Reunião 1a1' : '📹 Sala de reunião'}
               </span>
               <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button onClick={() => sendReaction('👏')} title="Bater palmas"
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium text-white bg-white/10 hover:bg-white/20 transition active:scale-90">
+                  👏<span className="hidden sm:inline">{callPip ? '' : ' Palmas'}</span>
+                </button>
                 <button onClick={toggleHand} title={handUp ? 'Abaixar a mão' : 'Levantar a mão'}
                   className={`px-2.5 py-1 rounded-lg text-xs font-medium transition active:scale-95 ${handUp ? 'bg-amber-400 text-black shadow' : 'text-white bg-white/10 hover:bg-white/20'}`}>
-                  <span className={handUp ? 'inline-block animate-pulse' : ''}>✋</span>{callPip ? '' : (handUp ? ' Abaixar' : ' Levantar a mão')}
+                  <span className={handUp ? 'inline-block animate-pulse' : ''}>✋</span><span className="hidden sm:inline">{callPip ? '' : (handUp ? ' Abaixar' : ' Levantar a mão')}</span>
                 </button>
                 {callPip ? (
                   <button onClick={expandCall} title="Expandir"
@@ -223,8 +238,17 @@ export default function OfficeShell({ session, children }: { session: UserSessio
                 <span className="text-amber-100 text-[11px] truncate">{raisedHands.map(h => h.name).join(', ')}</span>
               </div>
             )}
-            <div className="flex-1 min-h-0">
+            <div className="flex-1 min-h-0 relative">
               <DailyRoom room={inPrivate ? 'invollve-1a1' : 'invollve-escritorio'} max={inPrivate ? 2 : undefined} displayName={session.name} />
+              {/* Floating reactions (claps) over the call — Google-Meet style */}
+              <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex items-end justify-center gap-2 overflow-hidden">
+                {floatReacts.map(r => (
+                  <div key={r.key} className="flex flex-col items-center" style={{ animation: 'clapFloat 2.6s ease-out forwards' }}>
+                    <span className="text-3xl drop-shadow">{r.emoji}</span>
+                    <span className="text-[10px] text-white/90 bg-black/40 rounded px-1 mt-0.5 max-w-[90px] truncate">{r.name}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
