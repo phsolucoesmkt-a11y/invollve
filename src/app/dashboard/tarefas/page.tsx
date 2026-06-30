@@ -40,16 +40,20 @@ export default function TarefasPage() {
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [showDateMenu, setShowDateMenu] = useState(false)
+  const [meId, setMeId] = useState<number | null>(null) // my user id
+  const [onlyMine, setOnlyMine] = useState(false) // show only tasks assigned to me
 
   async function load() {
-    const [t, u, c] = await Promise.all([
+    const [t, u, c, me] = await Promise.all([
       fetch('/api/tasks').then(r => r.json()),
       fetch('/api/users/list').then(r => r.json()),
       fetch('/api/clients').then(r => r.json()),
+      fetch('/api/profile').then(r => r.json()).catch(() => null),
     ])
     setTasks(Array.isArray(t) ? t : [])
     setUsers(Array.isArray(u) ? u : [])
     setClients(Array.isArray(c) ? c : [])
+    if (me && me.id) setMeId(me.id)
   }
   useEffect(() => { load() }, [])
 
@@ -98,7 +102,7 @@ export default function TarefasPage() {
     return true
   }
 
-  const visibleTasks = tasks.filter(matchesDate)
+  const visibleTasks = tasks.filter(matchesDate).filter(t => !onlyMine || t.assigned_to === meId)
   const activeFilterLabel = DATE_FILTERS.find(f => f.id === dateFilter)?.label || 'Todas as datas'
 
   async function remove(id: number) {
@@ -114,6 +118,12 @@ export default function TarefasPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-black text-white">✅ Tarefas</h1>
         <div className="flex items-center gap-3">
+          {/* Só minhas tarefas — foco no que é meu */}
+          <button onClick={() => setOnlyMine(v => !v)} title="Mostrar só as tarefas atribuídas a mim"
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm border transition-colors ${onlyMine ? 'border-purple-500/50 text-purple-200 bg-purple-500/15' : 'border-white/10 text-zinc-300 bg-white/5 hover:bg-white/10'}`}>
+            <span>{onlyMine ? '🙋' : '👥'}</span>
+            <span>{onlyMine ? 'Só minhas' : 'Todas'}</span>
+          </button>
           {/* Filtro por data estilo ClickUp */}
           <div className="relative">
             <button onClick={() => setShowDateMenu(v => !v)}

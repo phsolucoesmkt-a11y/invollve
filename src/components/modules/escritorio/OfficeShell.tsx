@@ -3,7 +3,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
 import { UserSession } from '@/lib/auth'
 import OfficeCanvas from './OfficeCanvas'
-import { CallProvider, CallControls, OfficeTiles } from './OfficeCall'
+import { CallProvider, OfficeTiles } from './OfficeCall'
 import DailyRoom from '@/components/DailyRoom'
 import { subscribeOfficeStream } from '@/lib/officeStream'
 import AvatarSelect, { shouldShowAvatarSelect, getAvatarColor } from './AvatarSelect'
@@ -180,7 +180,6 @@ export default function OfficeShell({ session, children }: { session: UserSessio
           <>
             <OfficeTiles />
             <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-end gap-3">
-              <CallControls variant="office" />
               <button onClick={enterMeeting} title="Entrar na reunião"
                 className="h-11 px-5 rounded-full flex items-center gap-2 text-white text-sm font-semibold shadow-xl transition-all hover:brightness-110 active:scale-95"
                 style={{ background: 'var(--grad)' }}>
