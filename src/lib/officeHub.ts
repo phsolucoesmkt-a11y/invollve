@@ -19,8 +19,11 @@ export interface OfficePlayer {
   meeting: boolean     // is this user currently in the meeting room
   meetingSeat: number  // assigned meeting chair 0..7 (-1 = waiting / not in meeting)
   screen: boolean      // is this user currently sharing their screen
+  invite?: { from: number; fromName: string; room: string } | null // pending call invite for this user
   t: number
 }
+
+export interface CallInvite { from: number; fromName: string; room: string; t: number }
 
 export interface ChatMsg {
   id: number
@@ -40,6 +43,7 @@ interface Hub {
   meeting: Set<number>             // userIds currently in the meeting
   meetingSeats: Map<number, number> // userId -> meeting seat index
   screens: Set<number>             // userIds currently sharing their screen
+  invites: Map<number, CallInvite> // targetUserId -> pending call invite
   chat: ChatMsg[]
   listeners: Set<Entry>
 }
@@ -53,7 +57,7 @@ const CHAT_MAX = 40
 const g = globalThis as unknown as { __officeHub?: Hub }
 const hub: Hub = g.__officeHub ?? (g.__officeHub = {
   players: new Map(), hands: new Set(), seats: new Map(),
-  meeting: new Set(), meetingSeats: new Map(), screens: new Set(), chat: [], listeners: new Set(),
+  meeting: new Set(), meetingSeats: new Map(), screens: new Set(), invites: new Map(), chat: [], listeners: new Set(),
 })
 // Defensive init for older singletons left over across HMR
 if (!hub.chat) hub.chat = []
@@ -62,6 +66,9 @@ if (!hub.seats) hub.seats = new Map()
 if (!hub.meeting) hub.meeting = new Set()
 if (!hub.meetingSeats) hub.meetingSeats = new Map()
 if (!hub.screens) hub.screens = new Set()
+if (!hub.invites) hub.invites = new Map()
+
+const INVITE_TTL = 35000 // a ringing invite auto-expires after this
 
 // Lowest free index in [0, MAX_SEATS) not already taken in `map`; -1 if full.
 function lowestFreeSeat(map: Map<number, number>): number {
@@ -77,6 +84,8 @@ function releaseUser(id: number) {
   hub.meeting.delete(id)
   hub.meetingSeats.delete(id)
   hub.screens.delete(id)
+  hub.invites.delete(id) // clear an invite addressed to this user
+  for (const [to, inv] of hub.invites) if (inv.from === id) hub.invites.delete(to) // and ones they sent
 }
 
 export function snapshot(): OfficePlayer[] {
@@ -84,14 +93,19 @@ export function snapshot(): OfficePlayer[] {
   const out: OfficePlayer[] = []
   for (const [id, p] of hub.players) {
     if (now - p.t > STALE_MS) { hub.players.delete(id); releaseUser(id) }
-    else out.push({
-      ...p,
-      hand: hub.hands.has(id),
-      seat: hub.seats.get(id) ?? -1,
-      meeting: hub.meeting.has(id),
-      meetingSeat: hub.meetingSeats.get(id) ?? -1,
-      screen: hub.screens.has(id),
-    })
+    else {
+      const inv = hub.invites.get(id)
+      if (inv && now - inv.t > INVITE_TTL) hub.invites.delete(id)
+      out.push({
+        ...p,
+        hand: hub.hands.has(id),
+        seat: hub.seats.get(id) ?? -1,
+        meeting: hub.meeting.has(id),
+        meetingSeat: hub.meetingSeats.get(id) ?? -1,
+        screen: hub.screens.has(id),
+        invite: hub.invites.get(id) ? { from: inv!.from, fromName: inv!.fromName, room: inv!.room } : null,
+      })
+    }
   }
   return out
 }
@@ -133,6 +147,20 @@ export function setHand(id: number, raised: boolean) {
 // the office/call shows a brief floating emoji.
 export function emitReaction(id: number, name: string, emoji: string) {
   emit(reactionFrame({ id, name, emoji, t: Date.now() }))
+}
+
+// Click-to-call: ring `to` with a private room shared by both users. The invite
+// rides on presence (snapshot), so it reaches the target via SSE or polling.
+export function inviteCall(from: number, fromName: string, to: number): string {
+  const room = `inv-${Math.min(from, to)}-${Math.max(from, to)}`
+  hub.invites.set(to, { from, fromName, room, t: Date.now() })
+  broadcast()
+  return room
+}
+
+// Target accepted/declined, or caller cancelled — drop the pending invite.
+export function clearInvite(to: number) {
+  if (hub.invites.delete(to)) broadcast()
 }
 
 // Join/leave the meeting room. Joining grabs the lowest free meeting chair.

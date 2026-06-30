@@ -54,6 +54,8 @@ export default function OfficeShell({ session, children }: { session: UserSessio
   const [raisedHands, setRaisedHands] = useState<{ id: number; name: string }[]>([]) // everyone with a raised hand
   const [callReset, setCallReset] = useState(0) // bumped on leave to move the avatar out of the room
   const [floatReacts, setFloatReacts] = useState<{ key: number; emoji: string; name: string }[]>([]) // transient claps floating up
+  const [privateRoom, setPrivateRoom] = useState<string | null>(null) // room for a click-to-call (overrides the 1a1 table room)
+  const [incomingInvite, setIncomingInvite] = useState<{ from: number; fromName: string; room: string } | null>(null)
 
   useEffect(() => {
     setAvatarColor(getAvatarColor(session.role))
@@ -88,14 +90,37 @@ export default function OfficeShell({ session, children }: { session: UserSessio
   const enterMeeting = useCallback(() => {
     router.push(OFFICE_PATH)
     post('/api/escritorio/meeting', { join: true })
-    setInPrivate(false); setPipMin(false); setHandUp(false); setInMeeting(true)
+    setInPrivate(false); setPipMin(false); setHandUp(false); setPrivateRoom(null); setInMeeting(true)
   }, [router])
 
   // Private 1-on-1: opens a separate Daily room limited to 2 people.
   const enterPrivate = useCallback(() => {
     router.push(OFFICE_PATH)
-    setInMeeting(false); setPipMin(false); setHandUp(false); setInPrivate(true)
+    setInMeeting(false); setPipMin(false); setHandUp(false); setPrivateRoom(null); setInPrivate(true)
   }, [router])
+
+  // Click-to-call: ring a specific person and drop into a shared private room.
+  const callUser = useCallback((id: number, name: string) => {
+    const room = `inv-${Math.min(session.id, id)}-${Math.max(session.id, id)}`
+    post('/api/escritorio/invite', { to: id })
+    router.push(OFFICE_PATH)
+    setInMeeting(false); setPipMin(false); setHandUp(false); setPrivateRoom(room); setInPrivate(true)
+  }, [router, session.id])
+
+  // Accept / decline an incoming call invite.
+  const acceptInvite = useCallback(() => {
+    setIncomingInvite(inv => {
+      if (inv) {
+        post('/api/escritorio/invite', { clear: session.id })
+        router.push(OFFICE_PATH)
+        setInMeeting(false); setPipMin(false); setHandUp(false); setPrivateRoom(inv.room); setInPrivate(true)
+      }
+      return null
+    })
+  }, [router, session.id])
+  const declineInvite = useCallback(() => {
+    post('/api/escritorio/invite', { clear: session.id }); setIncomingInvite(null)
+  }, [session.id])
 
   // Shared call helpers (the call can be full-screen or a floating PiP).
   const inCall = inMeeting || inPrivate
@@ -103,9 +128,10 @@ export default function OfficeShell({ session, children }: { session: UserSessio
   const leaveCall = useCallback(() => {
     setPipMin(false); setHandUp(false)
     post('/api/escritorio/meeting', { join: false })
-    setInMeeting(false); setInPrivate(false)
+    post('/api/escritorio/invite', { clear: session.id }) // drop any invite addressed to me
+    setInMeeting(false); setInPrivate(false); setPrivateRoom(null)
     setCallReset(n => n + 1) // step the avatar back to the open area
-  }, [])
+  }, [session.id])
   const expandCall = useCallback(() => { setPipMin(false); router.push(OFFICE_PATH) }, [router])
 
   // Raise / lower my hand — reuses the office presence system, so everyone in
@@ -139,12 +165,21 @@ export default function OfficeShell({ session, children }: { session: UserSessio
     return subscribeOfficeStream({ presence: onPresence, reaction: onReaction })
   }, [inCall])
 
+  // Always watch presence for an incoming call invite addressed to me.
+  useEffect(() => {
+    const onPresence = (players: unknown[]) => {
+      const me = (players as { id: number; invite?: { from: number; fromName: string; room: string } | null }[]).find(p => p.id === session.id)
+      setIncomingInvite(me?.invite ?? null)
+    }
+    return subscribeOfficeStream({ presence: onPresence })
+  }, [session.id])
+
   return (
     <CallProvider session={session}>
       <div className="relative flex-1 h-screen overflow-hidden">
         {/* Office canvas (paused while in a call) */}
         <div className={`absolute inset-0 transition-all duration-300 ${overlayOpen ? 'scale-[0.99] blur-[2px] brightness-[0.55]' : ''}`}>
-          <OfficeCanvas session={session} active={!overlayOpen && !showSelect && !inCall} avatarColor={avatarColor} onEnterMeeting={enterMeeting} onEnterPrivate={enterPrivate} resetKey={callReset} />
+          <OfficeCanvas session={session} active={!overlayOpen && !showSelect && !inCall} avatarColor={avatarColor} onEnterMeeting={enterMeeting} onEnterPrivate={enterPrivate} onCallUser={callUser} resetKey={callReset} />
         </div>
 
         {/* Floating module window */}
@@ -238,7 +273,7 @@ export default function OfficeShell({ session, children }: { session: UserSessio
               </div>
             )}
             <div className="flex-1 min-h-0 relative">
-              <DailyRoom room={inPrivate ? 'invollve-1a1' : 'invollve-escritorio'} max={inPrivate ? 2 : undefined} displayName={session.name} />
+              <DailyRoom room={inPrivate ? (privateRoom || 'invollve-1a1') : 'invollve-escritorio'} max={inPrivate ? 2 : undefined} displayName={session.name} />
               {/* Floating reactions (claps) over the call — Google-Meet style */}
               <div className="pointer-events-none absolute inset-x-0 bottom-2 z-10 flex items-end justify-center gap-2 overflow-hidden">
                 {floatReacts.map(r => (
@@ -247,6 +282,22 @@ export default function OfficeShell({ session, children }: { session: UserSessio
                     <span className="text-[10px] text-white/90 bg-black/40 rounded px-1 mt-0.5 max-w-[90px] truncate">{r.name}</span>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Incoming call invite — someone clicked your character */}
+        {incomingInvite && !inCall && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 p-4">
+            <div className="w-full max-w-xs rounded-2xl bg-[#140c26] border border-white/10 shadow-2xl p-5 text-center">
+              <div className="text-4xl mb-2 animate-bounce">📞</div>
+              <p className="text-white font-semibold leading-tight">{incomingInvite.fromName}</p>
+              <p className="text-zinc-300 text-sm">está te chamando…</p>
+              <p className="text-zinc-500 text-[11px] mt-1">Reunião privada (só vocês dois)</p>
+              <div className="flex gap-2 mt-4">
+                <button onClick={declineInvite} className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white bg-white/10 hover:bg-white/20 transition active:scale-95">Recusar</button>
+                <button onClick={acceptInvite} className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition active:scale-95" style={{ background: 'var(--grad)' }}>Atender</button>
               </div>
             </div>
           </div>

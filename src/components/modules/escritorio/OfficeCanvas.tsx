@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useEffect, useRef, useCallback, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { UserSession } from '@/lib/auth'
 import { updateNearby } from '@/lib/officeProximity'
 import { subscribeOfficeStream } from '@/lib/officeStream'
@@ -180,7 +180,7 @@ function inMeetingRoom(x: number, y: number) {
   return x > MR.x + WT && x < MR.x + MR.w - WT && y > MR.y + WT && y < MR.y + MR.h - WT
 }
 
-export default function OfficeCanvas({ session, active = true, avatarColor, onEnterMeeting, onEnterPrivate, resetKey = 0 }: { session: UserSession; active?: boolean; avatarColor?: string; onEnterMeeting?: () => void; onEnterPrivate?: () => void; resetKey?: number }) {
+export default function OfficeCanvas({ session, active = true, avatarColor, onEnterMeeting, onEnterPrivate, onCallUser, resetKey = 0 }: { session: UserSession; active?: boolean; avatarColor?: string; onEnterMeeting?: () => void; onEnterPrivate?: () => void; onCallUser?: (id: number, name: string) => void; resetKey?: number }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animRef = useRef(0)
@@ -201,6 +201,28 @@ export default function OfficeCanvas({ session, active = true, avatarColor, onEn
   onEnterRef.current = onEnterMeeting
   const onEnterPrivateRef = useRef(onEnterPrivate)
   onEnterPrivateRef.current = onEnterPrivate
+  const onCallUserRef = useRef(onCallUser)
+  onCallUserRef.current = onCallUser
+
+  // Click a character (not seated in a meeting) to ring them for a private call.
+  const onCanvasClick = (e: ReactMouseEvent<HTMLCanvasElement>) => {
+    if (!activeRef.current) return
+    const cv = canvasRef.current; if (!cv) return
+    const rect = cv.getBoundingClientRect()
+    const dpr = window.devicePixelRatio || 1
+    const { scale, ox, oy } = view.current
+    const wx = ((e.clientX - rect.left) * dpr - ox) / scale
+    const wy = ((e.clientY - rect.top) * dpr - oy) / scale
+    let best: NetPlayer | null = null, bd = Infinity
+    const now = Date.now()
+    othersRef.current.forEach(p => {
+      if (now - p.t > 12000 || p.meeting) return
+      const r = interp.current.get(p.id) ?? { x: p.x, y: p.y }
+      const d = (r.x - wx) ** 2 + (r.y - wy) ** 2
+      if (d < bd) { bd = d; best = p }
+    })
+    if (best && bd < 22 * 22) onCallUserRef.current?.((best as NetPlayer).id, (best as NetPlayer).name)
+  }
 
   // When the user leaves a call, OfficeShell bumps resetKey so the character
   // steps back to the open area — otherwise it'd be left standing inside the
@@ -487,7 +509,7 @@ export default function OfficeCanvas({ session, active = true, avatarColor, onEn
 
   return (
     <div ref={wrapRef} className="relative w-full h-full">
-      <canvas ref={canvasRef} className="block" />
+      <canvas ref={canvasRef} className="block cursor-pointer" onClick={onCanvasClick} />
       {nearby.length > 0 && (
         <div className="absolute bottom-3 right-3 w-72 max-w-[80vw] rounded-xl border border-white/10 bg-[#0f1420]/95 shadow-2xl flex flex-col overflow-hidden">
           <div className="px-3 py-2 border-b border-white/10 text-xs text-zinc-300 flex items-center gap-1.5">
