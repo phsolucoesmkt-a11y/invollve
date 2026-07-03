@@ -66,6 +66,8 @@ const TABLES = [
     assigned_to INTEGER,
     client_id INTEGER,
     due_date TEXT,
+    reminder INTEGER DEFAULT 0,
+    reminder_sent INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
   )`,
   `CREATE TABLE IF NOT EXISTS financial_entries (
@@ -121,6 +123,13 @@ const TABLES = [
   )`,
 ]
 
+// Idempotent column additions for DBs created before a column existed.
+// SQLite errors on a duplicate column — we swallow that so it's safe to re-run.
+const MIGRATIONS = [
+  `ALTER TABLE tasks ADD COLUMN reminder INTEGER DEFAULT 0`,
+  `ALTER TABLE tasks ADD COLUMN reminder_sent INTEGER DEFAULT 0`,
+]
+
 let _initialized = false
 
 async function ensureInit() {
@@ -128,6 +137,9 @@ async function ensureInit() {
   const client = getClient()
   for (const sql of TABLES) {
     await client.execute(sql)
+  }
+  for (const sql of MIGRATIONS) {
+    try { await client.execute(sql) } catch { /* column already exists */ }
   }
   _initialized = true
 }

@@ -19,10 +19,10 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session || session.role === 'cliente') return NextResponse.json({ error: 'Não autorizado' }, { status: 403 })
-  const { title, description, status, priority, assigned_to, client_id, due_date } = await req.json()
+  const { title, description, status, priority, assigned_to, client_id, due_date, reminder } = await req.json()
   const result = await db.run(
-    'INSERT INTO tasks (title, description, status, priority, assigned_to, client_id, due_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [title, description, status || 'todo', priority || 'media', assigned_to || null, client_id || null, due_date || null]
+    'INSERT INTO tasks (title, description, status, priority, assigned_to, client_id, due_date, reminder, reminder_sent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)',
+    [title, description, status || 'todo', priority || 'media', assigned_to || null, client_id || null, due_date || null, reminder ? 1 : 0]
   )
 
   if (assigned_to) {
@@ -39,9 +39,15 @@ export async function PUT(req: NextRequest) {
   const session = await getSession()
   if (!session || session.role === 'cliente') return NextResponse.json({ error: 'Não autorizado' }, { status: 403 })
   const { id, ...body } = await req.json()
+  // Re-arm the WhatsApp reminder if it was just turned on or the due date moved.
+  const old = await db.get<any>('SELECT due_date, reminder, reminder_sent FROM tasks WHERE id=?', [id])
+  const rem = body.reminder ? 1 : 0
+  let sent = old?.reminder_sent ?? 0
+  if (!rem) sent = 0
+  else if (!old?.reminder || (old?.due_date || null) !== (body.due_date || null)) sent = 0
   await db.run(
-    'UPDATE tasks SET title=?, description=?, status=?, priority=?, assigned_to=?, client_id=?, due_date=? WHERE id=?',
-    [body.title, body.description, body.status, body.priority, body.assigned_to || null, body.client_id || null, body.due_date || null, id]
+    'UPDATE tasks SET title=?, description=?, status=?, priority=?, assigned_to=?, client_id=?, due_date=?, reminder=?, reminder_sent=? WHERE id=?',
+    [body.title, body.description, body.status, body.priority, body.assigned_to || null, body.client_id || null, body.due_date || null, rem, sent, id]
   )
   return NextResponse.json({ ok: true })
 }
