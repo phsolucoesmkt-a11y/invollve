@@ -1,5 +1,5 @@
 import { getSession } from '@/lib/session'
-import { snapshot, recentChat, touch } from '@/lib/officeHub'
+import { snapshot, recentChat, recentReactions, touch } from '@/lib/officeHub'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -13,5 +13,5 @@ export async function GET() {
   const session = await getSession()
   if (!session) return Response.json({ error: 'unauthorized' }, { status: 401 })
   touch(session.id) // polling also counts as "present"
-  return Response.json({ players: snapshot(), chat: recentChat() }, { headers: { 'Cache-Control': 'no-store' } })
+  return Response.json({ players: snapshot(), chat: recentChat(), reactions: recentReactions() }, { headers: { 'Cache-Control': 'no-store' } })
 }

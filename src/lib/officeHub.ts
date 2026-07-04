@@ -45,6 +45,7 @@ interface Hub {
   screens: Set<number>             // userIds currently sharing their screen
   invites: Map<number, CallInvite> // targetUserId -> pending call invite
   chat: ChatMsg[]
+  reacts: { id: number; name: string; emoji: string; t: number }[] // recent transient reactions
   listeners: Set<Entry>
 }
 
@@ -57,7 +58,7 @@ const CHAT_MAX = 40
 const g = globalThis as unknown as { __officeHub?: Hub }
 const hub: Hub = g.__officeHub ?? (g.__officeHub = {
   players: new Map(), hands: new Set(), seats: new Map(),
-  meeting: new Set(), meetingSeats: new Map(), screens: new Set(), invites: new Map(), chat: [], listeners: new Set(),
+  meeting: new Set(), meetingSeats: new Map(), screens: new Set(), invites: new Map(), chat: [], reacts: [], listeners: new Set(),
 })
 // Defensive init for older singletons left over across HMR
 if (!hub.chat) hub.chat = []
@@ -67,6 +68,7 @@ if (!hub.meeting) hub.meeting = new Set()
 if (!hub.meetingSeats) hub.meetingSeats = new Map()
 if (!hub.screens) hub.screens = new Set()
 if (!hub.invites) hub.invites = new Map()
+if (!hub.reacts) hub.reacts = []
 
 const INVITE_TTL = 35000 // a ringing invite auto-expires after this
 
@@ -143,10 +145,18 @@ export function setHand(id: number, raised: boolean) {
   broadcast()
 }
 
-// Transient reaction (e.g. clap 👏) — broadcast once, not stored. Everyone in
-// the office/call shows a brief floating emoji.
+// Transient reaction (e.g. clap 👏). Kept in a short buffer ON THE HUB (the
+// globalThis singleton — module-local state is NOT shared between route
+// handlers) so the polling clients pick it up; clients dedupe by id+t.
 export function emitReaction(id: number, name: string, emoji: string) {
-  emit(reactionFrame({ id, name, emoji, t: Date.now() }))
+  const r = { id, name, emoji, t: Date.now() }
+  hub.reacts.push(r)
+  if (hub.reacts.length > 30) hub.reacts.shift()
+  emit(reactionFrame(r))
+}
+export function recentReactions(ms = 8000) {
+  const now = Date.now()
+  return hub.reacts.filter(r => now - r.t < ms)
 }
 
 // Click-to-call: ring `to` with a private room shared by both users. The invite

@@ -1,14 +1,19 @@
-// Single shared SSE connection for the whole office page.
+// Live office data — PURE POLLING, no long-lived connections.
 //
-// The office canvas, the A/V CallProvider and the meeting room each need the
-// live presence/chat/signal stream. Opening one EventSource per component means
-// 2-3 long-lived connections per browser, which exhausts the limited Node
-// workers on the constrained (CloudLinux) host — the second connection hangs,
-// so WebRTC signaling never arrives and calls get stuck "connecting".
+// History: this used to be a shared SSE (EventSource) stream. On the constrained
+// CloudLinux/cPanel host, long-lived connections pile up and exhaust the few
+// Node workers — the stream stalls after the first frame, freezing movement,
+// dropping chat and leaving "ghost" players behind. Everything that needed SSE
+// (WebRTC signaling for in-office A/V) has been removed (calls go through
+// Daily now), so the SSE connection is gone entirely.
 //
-// This singleton opens ONE EventSource and fans events out to all subscribers,
-// kept on globalThis so it survives HMR. Ref-counted: the connection closes
-// only when the last subscriber unmounts.
+// Instead, ONE short GET /api/escritorio/snapshot every POLL_MS carries all of
+// it: presence/movement, chat, reactions, raised hands, meeting state and call
+// invites. Short requests never hold a worker, so this stays live on the shared
+// host — like a game client polling the server.
+//
+// Singleton on globalThis (survives HMR), ref-counted: polling stops when the
+// last subscriber unmounts.
 
 type PresenceFn = (players: unknown[]) => void
 type ChatFn = (msg: unknown) => void
@@ -16,7 +21,6 @@ type SignalFn = (from: number, data: unknown) => void
 type ReactionFn = (r: { id: number; name: string; emoji: string; t: number }) => void
 
 interface StreamStore {
-  es: EventSource | null
   refs: number
   presence: Set<PresenceFn>
   chat: Set<ChatFn>
@@ -27,22 +31,24 @@ interface StreamStore {
 
 const g = globalThis as unknown as { __officeStream?: StreamStore }
 const S: StreamStore = g.__officeStream ?? (g.__officeStream = {
-  es: null, refs: 0, presence: new Set(), chat: new Set(), signal: new Set(), reaction: new Set(), poll: null,
+  refs: 0, presence: new Set(), chat: new Set(), signal: new Set(), reaction: new Set(), poll: null,
 })
 
 if (!S.reaction) S.reaction = new Set() // survive HMR with an older store shape
 
-// Polling fallback: keeps presence/movement AND chat live even when the SSE
-// stalls on the shared host. Short GET requests, fanned out to the same subs.
 const POLL_MS = 700
-const seenChat = new Set<string>() // dedupe chat between SSE and polling
-function fanChat(m: { id: number; t: number }) {
-  const key = `${m.id}:${m.t}`
-  if (seenChat.has(key)) return
-  seenChat.add(key)
-  if (seenChat.size > 200) { for (const k of seenChat) { seenChat.delete(k); if (seenChat.size <= 100) break } }
-  S.chat.forEach(fn => fn(m))
+
+// Transient events (chat/reactions) ride on every snapshot for a short window,
+// so we dedupe by sender+timestamp before fanning out.
+const seen = new Set<string>()
+function once(kind: string, id: number, t: number): boolean {
+  const key = `${kind}:${id}:${t}`
+  if (seen.has(key)) return false
+  seen.add(key)
+  if (seen.size > 400) { for (const k of seen) { seen.delete(k); if (seen.size <= 200) break } }
+  return true
 }
+
 function startPolling() {
   if (S.poll) return
   const tick = () => {
@@ -50,37 +56,21 @@ function startPolling() {
       .then(r => r.ok ? r.json() : null)
       .then(a => {
         if (!a) return
-        // supports both the old shape (array) and the new { players, chat }
         const players = Array.isArray(a) ? a : a.players
         if (Array.isArray(players)) S.presence.forEach(fn => fn(players))
-        if (Array.isArray(a.chat)) a.chat.forEach((m: { id: number; t: number }) => fanChat(m))
+        if (Array.isArray(a.chat)) {
+          a.chat.forEach((m: { id: number; t: number }) => { if (once('c', m.id, m.t)) S.chat.forEach(fn => fn(m)) })
+        }
+        if (Array.isArray(a.reactions)) {
+          a.reactions.forEach((r: { id: number; name: string; emoji: string; t: number }) => {
+            if (once('r', r.id, r.t)) S.reaction.forEach(fn => fn(r))
+          })
+        }
       })
       .catch(() => {})
   }
   tick()
   S.poll = setInterval(tick, POLL_MS)
-}
-
-function open() {
-  startPolling()
-  if (S.es) return
-  const es = new EventSource('/api/escritorio/stream')
-  es.onmessage = (e) => {
-    try { const a = JSON.parse(e.data) as unknown[]; S.presence.forEach(fn => fn(a)) } catch {}
-  }
-  es.addEventListener('chat', (e) => {
-    try { const m = JSON.parse((e as MessageEvent).data); fanChat(m) } catch {}
-  })
-  es.addEventListener('signal', (e) => {
-    try {
-      const { from, data } = JSON.parse((e as MessageEvent).data) as { from: number; data: unknown }
-      S.signal.forEach(fn => fn(from, data))
-    } catch {}
-  })
-  es.addEventListener('reaction', (e) => {
-    try { const r = JSON.parse((e as MessageEvent).data); S.reaction.forEach(fn => fn(r)) } catch {}
-  })
-  S.es = es
 }
 
 export interface OfficeStreamHandlers {
@@ -91,7 +81,7 @@ export interface OfficeStreamHandlers {
 }
 
 export function subscribeOfficeStream(h: OfficeStreamHandlers): () => void {
-  open()
+  startPolling()
   S.refs++
   if (h.presence) S.presence.add(h.presence)
   if (h.chat) S.chat.add(h.chat)
@@ -104,7 +94,6 @@ export function subscribeOfficeStream(h: OfficeStreamHandlers): () => void {
     if (h.reaction) S.reaction.delete(h.reaction)
     S.refs--
     if (S.refs <= 0) {
-      if (S.es) { S.es.close(); S.es = null }
       if (S.poll) { clearInterval(S.poll); S.poll = null }
       S.refs = 0
     }
