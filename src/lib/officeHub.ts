@@ -202,6 +202,13 @@ export function subscribe(userId: number, fn: (frame: string) => void): () => vo
   return () => hub.listeners.delete(entry)
 }
 
+// Recent chat for the polling clients (SSE can stall on the shared host, so
+// chat also rides along with the presence snapshot; clients dedupe).
+export function recentChat(ms = 30000): ChatMsg[] {
+  const now = Date.now()
+  return hub.chat.filter(m => now - m.t < ms)
+}
+
 export function initialFrames(): string {
   const now = Date.now()
   const recent = hub.chat.filter(m => now - m.t < 60000)

@@ -32,15 +32,29 @@ const S: StreamStore = g.__officeStream ?? (g.__officeStream = {
 
 if (!S.reaction) S.reaction = new Set() // survive HMR with an older store shape
 
-// Polling fallback: keeps presence/movement live even when the SSE stalls on
-// the shared host. Short GET requests, fanned out to the same presence subs.
-const POLL_MS = 900
+// Polling fallback: keeps presence/movement AND chat live even when the SSE
+// stalls on the shared host. Short GET requests, fanned out to the same subs.
+const POLL_MS = 700
+const seenChat = new Set<string>() // dedupe chat between SSE and polling
+function fanChat(m: { id: number; t: number }) {
+  const key = `${m.id}:${m.t}`
+  if (seenChat.has(key)) return
+  seenChat.add(key)
+  if (seenChat.size > 200) { for (const k of seenChat) { seenChat.delete(k); if (seenChat.size <= 100) break } }
+  S.chat.forEach(fn => fn(m))
+}
 function startPolling() {
   if (S.poll) return
   const tick = () => {
     fetch('/api/escritorio/snapshot', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null)
-      .then(a => { if (Array.isArray(a)) S.presence.forEach(fn => fn(a)) })
+      .then(a => {
+        if (!a) return
+        // supports both the old shape (array) and the new { players, chat }
+        const players = Array.isArray(a) ? a : a.players
+        if (Array.isArray(players)) S.presence.forEach(fn => fn(players))
+        if (Array.isArray(a.chat)) a.chat.forEach((m: { id: number; t: number }) => fanChat(m))
+      })
       .catch(() => {})
   }
   tick()
@@ -55,7 +69,7 @@ function open() {
     try { const a = JSON.parse(e.data) as unknown[]; S.presence.forEach(fn => fn(a)) } catch {}
   }
   es.addEventListener('chat', (e) => {
-    try { const m = JSON.parse((e as MessageEvent).data); S.chat.forEach(fn => fn(m)) } catch {}
+    try { const m = JSON.parse((e as MessageEvent).data); fanChat(m) } catch {}
   })
   es.addEventListener('signal', (e) => {
     try {

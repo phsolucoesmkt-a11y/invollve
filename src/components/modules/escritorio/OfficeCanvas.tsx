@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useRef, useCallback, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { UserSession } from '@/lib/auth'
-import { updateNearby } from '@/lib/officeProximity'
 import { subscribeOfficeStream } from '@/lib/officeStream'
 
 /*
@@ -19,7 +18,6 @@ const BH = 420
 const SPEED = 1.8
 const PR = 8
 const CHAT_RADIUS = 58
-const AUDIO_RADIUS = 220
 
 type Status = 'online' | 'ocupado' | 'reuniao'
 type Facing = 'down' | 'up' | 'left' | 'right'
@@ -469,16 +467,15 @@ export default function OfficeCanvas({ session, active = true, avatarColor, onEn
       })
       for (const id of im.keys()) if (!liveIds.has(id)) im.delete(id)
 
-      // proximity for voice chat (using real, smoothed positions)
+      // proximity for the text chat box (A/V no escritório foi removido — câmera
+      // e microfone existem só nas reuniões, via Daily).
       const mp = pos.current
       const others = othersRef.current.filter(p => now - p.t < 12000 && !p.meeting)
       const posOf = (p: NetPlayer) => { const r = im.get(p.id); return r ? { x: r.x, y: r.y } : { x: p.x, y: p.y } }
       const dist2 = (p: NetPlayer) => { const s = posOf(p); return (s.x - mp.x) ** 2 + (s.y - mp.y) ** 2 }
       const near = others.filter(p => dist2(p) < CHAT_RADIUS ** 2)
-      const audioNear = others.filter(p => dist2(p) < AUDIO_RADIUS ** 2)
       const key = near.map(p => p.id).sort().join(',')
       if (key !== nearbyKey.current) { nearbyKey.current = key; setNearby(near.map(p => p.name.split(' ')[0])) }
-      updateNearby(new Set(audioNear.map(p => p.id)))
 
       render(ctx)
       animRef.current = requestAnimationFrame(loop)
@@ -488,7 +485,6 @@ export default function OfficeCanvas({ session, active = true, avatarColor, onEn
     return () => {
       canvas.removeEventListener('wheel', onWheel)
       ro.disconnect(); cancelAnimationFrame(animRef.current)
-      updateNearby(new Set())
     }
   }, [render, myStatus])
 

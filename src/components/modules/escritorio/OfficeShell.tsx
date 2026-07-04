@@ -3,7 +3,6 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useCallback } from 'react'
 import { UserSession } from '@/lib/auth'
 import OfficeCanvas from './OfficeCanvas'
-import { CallProvider, OfficeTiles } from './OfficeCall'
 import DailyRoom from '@/components/DailyRoom'
 import { subscribeOfficeStream } from '@/lib/officeStream'
 import AvatarSelect, { shouldShowAvatarSelect, getAvatarColor } from './AvatarSelect'
@@ -77,11 +76,17 @@ export default function OfficeShell({ session, children }: { session: UserSessio
   // Opening another module no longer leaves the call — it shrinks to a PiP
   // (handled in render). The call only ends when the user clicks "Sair".
 
-  // Leave the meeting if the tab is closed.
+  // Tab closed: leave the meeting AND remove my presence right away, so my
+  // character doesn't linger as a "ghost" in everyone else's office.
   useEffect(() => {
-    const onUnload = () => { if (inMeeting) post('/api/escritorio/meeting', { join: false }) }
+    const onUnload = () => {
+      if (inMeeting) post('/api/escritorio/meeting', { join: false })
+      // sendBeacon survives page unload more reliably than fetch
+      try { navigator.sendBeacon('/api/escritorio/leave', '{}') } catch { post('/api/escritorio/leave', {}) }
+    }
+    window.addEventListener('pagehide', onUnload)
     window.addEventListener('beforeunload', onUnload)
-    return () => window.removeEventListener('beforeunload', onUnload)
+    return () => { window.removeEventListener('pagehide', onUnload); window.removeEventListener('beforeunload', onUnload) }
   }, [inMeeting])
 
   function closeWindow() { router.push(OFFICE_PATH) }
@@ -175,7 +180,6 @@ export default function OfficeShell({ session, children }: { session: UserSessio
   }, [session.id])
 
   return (
-    <CallProvider session={session}>
       <div className="relative flex-1 h-screen overflow-hidden">
         {/* Office canvas (paused while in a call) */}
         <div className={`absolute inset-0 transition-all duration-300 ${overlayOpen ? 'scale-[0.99] blur-[2px] brightness-[0.55]' : ''}`}>
@@ -210,18 +214,17 @@ export default function OfficeShell({ session, children }: { session: UserSessio
         {/* Avatar selection overlay (once per session) */}
         {showSelect && <AvatarSelect session={session} onEnter={handleEnter} />}
 
-        {/* Office dock + enter-meeting button — only when not already in a call */}
+        {/* Office dock + enter-meeting button — only when not already in a call.
+            (A/V por proximidade foi removido do escritório: câmera/mic só nas
+            reuniões via Daily, então nada de tile "conectando" na lateral.) */}
         {!showSelect && !overlayOpen && !inCall && (
-          <>
-            <OfficeTiles />
-            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-end gap-3">
-              <button onClick={enterMeeting} title="Entrar na reunião"
-                className="h-11 px-5 rounded-full flex items-center gap-2 text-white text-sm font-semibold shadow-xl transition-all hover:brightness-110 active:scale-95"
-                style={{ background: 'var(--grad)' }}>
-                📹 Entrar na reunião
-              </button>
-            </div>
-          </>
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-end gap-3">
+            <button onClick={enterMeeting} title="Entrar na reunião"
+              className="h-11 px-5 rounded-full flex items-center gap-2 text-white text-sm font-semibold shadow-xl transition-all hover:brightness-110 active:scale-95"
+              style={{ background: 'var(--grad)' }}>
+              📹 Entrar na reunião
+            </button>
+          </div>
         )}
 
         {/* THE CALL — persistent while in a call. Full-screen on the office, or a
@@ -303,6 +306,5 @@ export default function OfficeShell({ session, children }: { session: UserSessio
           </div>
         )}
       </div>
-    </CallProvider>
   )
 }
