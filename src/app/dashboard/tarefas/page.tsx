@@ -199,8 +199,8 @@ export default function TarefasPage() {
               <label className={`flex items-start gap-2.5 px-3 py-2.5 rounded-xl border cursor-pointer transition-colors ${form.reminder ? 'border-green-500/40 bg-green-500/10' : 'border-white/10 bg-white/5 hover:bg-white/[0.08]'}`}>
                 <input type="checkbox" checked={form.reminder} onChange={e => setForm(f => ({ ...f, reminder: e.target.checked }))} className="mt-0.5 accent-green-500" />
                 <span className="text-sm text-zinc-200 leading-snug">
-                  <span className="font-medium text-white">Lembrete no WhatsApp</span> — mando pro responsável 1 dia antes do prazo.
-                  <span className="block text-[11px] text-zinc-500 mt-0.5">Precisa do telefone no cadastro e de data de entrega.</span>
+                  <span className="font-medium text-white">Lembrete por e-mail</span> — mando pro responsável 1 dia antes do prazo.
+                  <span className="block text-[11px] text-zinc-500 mt-0.5">Precisa do e-mail no cadastro e de data de entrega.</span>
                 </span>
               </label>
             </div>
@@ -237,7 +237,7 @@ export default function TarefasPage() {
                         <span className="text-xs text-zinc-400">{task.assigned_name}</span>
                       </div>
                     )}
-                    {task.due_date && <p className="text-xs text-zinc-500 mb-2">📅 {new Date(task.due_date + 'T00:00:00').toLocaleDateString('pt-BR')}{task.reminder ? <span className="ml-2 text-green-400" title="Lembrete no WhatsApp 1 dia antes">🔔 WhatsApp</span> : null}</p>}
+                    {task.due_date && <p className="text-xs text-zinc-500 mb-2">📅 {new Date(task.due_date + 'T00:00:00').toLocaleDateString('pt-BR')}{task.reminder ? <span className="ml-2 text-green-400" title="Lembrete por e-mail 1 dia antes">🔔 E-mail</span> : null}</p>}
                     <div className="flex items-center justify-between">
                       <span className={`text-xs px-1.5 py-0.5 rounded ${priorityColor(task.priority)}`}>{task.priority}</span>
                       <div className="flex gap-1">
