@@ -20,15 +20,16 @@ function fmtX(v: number | null | undefined) {
   if (v == null || isNaN(v)) return '—'
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'x'
 }
-function statusColor(status: string) {
-  if (status === 'Batida') return 'text-green-400 bg-green-400/10'
-  if (status === 'Risco') return 'text-yellow-400 bg-yellow-400/10'
-  if (status === 'Alerta') return 'text-red-400 bg-red-400/10'
-  return 'text-zinc-400 bg-white/5'
+function getStatus(pct: number) {
+  if (pct >= 1)    return { label: '🎉 Parabéns',   color: 'text-green-400 bg-green-400/10' }
+  if (pct >= 0.75) return { label: '💪 Falta Pouco', color: 'text-blue-400 bg-blue-400/10' }
+  if (pct >= 0.5)  return { label: '🚀 Bora',        color: 'text-yellow-400 bg-yellow-400/10' }
+  return                  { label: '⚠️ Alerta',      color: 'text-red-400 bg-red-400/10' }
 }
 function pctColor(pct: number) {
-  if (pct >= 1) return 'text-green-400'
-  if (pct >= 0.75) return 'text-yellow-400'
+  if (pct >= 1)    return 'text-green-400'
+  if (pct >= 0.75) return 'text-blue-400'
+  if (pct >= 0.5)  return 'text-yellow-400'
   return 'text-red-400'
 }
 
@@ -107,21 +108,22 @@ function NumInput({ value, onChange }: { value: string; onChange: (v: string) =>
   )
 }
 
-function SemaналTable({ campos, metas, dados, onChange, saved }: {
+function SemaналTable({ campos, metas, metasSem, dados, onChange }: {
   campos: string[]
   metas: Record<string, number>
+  metasSem: Record<string, number>
   dados: Semanas
   onChange: (campo: string, sem: string, val: string) => void
-  saved: boolean
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm min-w-[700px]">
+      <table className="w-full text-sm min-w-[800px]">
         <thead>
           <tr className="border-b border-white/10">
-            <th className="text-left text-zinc-400 font-medium py-2 pr-4 w-48">Indicador</th>
-            <th className="text-right text-zinc-400 font-medium py-2 px-2">Meta</th>
-            {SEMANAS.map(s => <th key={s} className="text-right text-zinc-400 font-medium py-2 px-2 min-w-[110px]">{s}</th>)}
+            <th className="text-left text-zinc-400 font-medium py-2 pr-4 w-44">Indicador</th>
+            <th className="text-right text-zinc-400 font-medium py-2 px-2">Meta Mês</th>
+            <th className="text-right text-zinc-400 font-medium py-2 px-2">Meta Sem.</th>
+            {SEMANAS.map(s => <th key={s} className="text-right text-zinc-400 font-medium py-2 px-2 min-w-[100px]">{s}</th>)}
             <th className="text-right text-zinc-400 font-medium py-2 px-2">Realizado</th>
             <th className="text-right text-zinc-400 font-medium py-2 px-2">%</th>
             <th className="text-right text-zinc-400 font-medium py-2 pl-2">Status</th>
@@ -130,13 +132,15 @@ function SemaналTable({ campos, metas, dados, onChange, saved }: {
         <tbody>
           {campos.map(campo => {
             const meta = metas[campo] ?? 0
+            const metaSem = metasSem[campo] ?? 0
             const realizado = SEMANAS.reduce((sum, s) => sum + (parseFloat(dados[campo]?.[s] || '0') || 0), 0)
             const pct = meta > 0 ? realizado / meta : 0
-            const status = pct >= 1 ? 'Batida' : pct >= 0.75 ? 'Risco' : 'Alerta'
+            const st = getStatus(pct)
             return (
               <tr key={campo} className="border-b border-white/5 hover:bg-white/2">
                 <td className="py-2 pr-4 text-zinc-300 font-medium">{campo}</td>
                 <td className="py-2 px-2 text-right text-zinc-400">{fmtNum(meta)}</td>
+                <td className="py-2 px-2 text-right text-blue-300 font-medium">{metaSem ? fmtNum(metaSem) : '—'}</td>
                 {SEMANAS.map(s => (
                   <td key={s} className="py-1 px-1">
                     <NumInput
@@ -148,7 +152,7 @@ function SemaналTable({ campos, metas, dados, onChange, saved }: {
                 <td className="py-2 px-2 text-right text-white font-semibold">{fmtNum(realizado)}</td>
                 <td className={`py-2 px-2 text-right font-bold ${pctColor(pct)}`}>{fmtPct(pct)}</td>
                 <td className="py-2 pl-2 text-right">
-                  {meta > 0 && <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(status)}`}>{status}</span>}
+                  {meta > 0 && <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${st.color}`}>{st.label}</span>}
                 </td>
               </tr>
             )
@@ -211,9 +215,13 @@ export default function PerformanceRealPage() {
   }
 
   const METAS_ORGANICO_IG: Record<string, number> = { 'Visualizações': 496410, 'Alcance': 131560, 'Interações c/ Conteúdo': 4749, 'Cliques no Link': 2061, 'Visitas ao Perfil': 5036, 'Seguidores': 1004 }
+  const METAS_SEM_IG: Record<string, number>     = { 'Visualizações': 124102, 'Alcance': 32890, 'Interações c/ Conteúdo': 1187, 'Cliques no Link': 515, 'Visitas ao Perfil': 1259, 'Seguidores': 251 }
   const METAS_ORGANICO_FB: Record<string, number> = { 'Visualizações': 584749, 'Visualizadores': 235180, 'Interações c/ Conteúdo': 1592, 'Cliques no Link': 2623, 'Visitas à Página': 2266, 'Seguidores': 91 }
+  const METAS_SEM_FB: Record<string, number>      = { 'Visualizações': 146187, 'Visualizadores': 58795, 'Interações c/ Conteúdo': 398, 'Cliques no Link': 656, 'Visitas à Página': 566, 'Seguidores': 23 }
   const METAS_TRAFEGO: Record<string, number> = { 'Investimento': 3300, 'Faturamento': 158700, 'ROAS': 50, 'Fluxo': 700, 'Vendas': 42, 'Ticket Médio': 3500, 'Taxa de conversão': 0.06 }
+  const METAS_SEM_TRAFEGO: Record<string, number> = { 'Investimento': 680, 'Faturamento': 34000, 'ROAS': 50, 'Fluxo': 175, 'Vendas': 11, 'Ticket Médio': 3500, 'Taxa de conversão': 0.06 }
   const METAS_CC: Record<string, number> = { 'Influenciado Contact Center': 192550, 'Investimento Meta': 3000, 'Investimento Google Ads': 2500, 'Leads Gerados': 700, 'Custo por Lead': 5, 'WhatsApp - Valor': 60000, 'WhatsApp - Ticket Médio': 2500, 'WhatsApp - Alcance': 300000, 'WhatsApp - Vendas': 28, 'Conversão Comercial': 0.052 }
+  const METAS_SEM_CC: Record<string, number>  = { 'Influenciado Contact Center': 48137, 'Investimento Meta': 750, 'Investimento Google Ads': 625, 'Leads Gerados': 175, 'Custo por Lead': 5, 'WhatsApp - Valor': 15000, 'WhatsApp - Ticket Médio': 2500, 'WhatsApp - Alcance': 75000, 'WhatsApp - Vendas': 7, 'Conversão Comercial': 0.052 }
 
   return (
     <div className="pb-10">
@@ -513,9 +521,9 @@ export default function PerformanceRealPage() {
             <SemaналTable
               campos={ORGANICO_CAMPOS.instagram}
               metas={METAS_ORGANICO_IG}
+              metasSem={METAS_SEM_IG}
               dados={organicoIg}
               onChange={(campo, sem, val) => updateSemana(setOrganicoIg, campo, sem, val)}
-              saved={saved['organico_ig']}
             />
             <div className="mt-4 flex justify-end">
               <button onClick={() => save('organico_ig', organicoIg)} disabled={saving}
@@ -532,9 +540,9 @@ export default function PerformanceRealPage() {
             <SemaналTable
               campos={ORGANICO_CAMPOS.facebook}
               metas={METAS_ORGANICO_FB}
+              metasSem={METAS_SEM_FB}
               dados={organicoFb}
               onChange={(campo, sem, val) => updateSemana(setOrganicoFb, campo, sem, val)}
-              saved={saved['organico_fb']}
             />
             <div className="mt-4 flex justify-end">
               <button onClick={() => save('organico_fb', organicoFb)} disabled={saving}
@@ -559,9 +567,9 @@ export default function PerformanceRealPage() {
             <SemaналTable
               campos={TRAFEGO_CAMPOS}
               metas={METAS_TRAFEGO}
+              metasSem={METAS_SEM_TRAFEGO}
               dados={trafegoLojas}
               onChange={(campo, sem, val) => updateSemana(setTrafegoLojas, campo, sem, val)}
-              saved={saved['trafego_lojas']}
             />
             <div className="mt-4 flex justify-end">
               <button onClick={() => save('trafego_lojas', trafegoLojas)} disabled={saving}
@@ -586,9 +594,9 @@ export default function PerformanceRealPage() {
             <SemaналTable
               campos={CC_CAMPOS}
               metas={METAS_CC}
+              metasSem={METAS_SEM_CC}
               dados={contactCenter}
               onChange={(campo, sem, val) => updateSemana(setContactCenter, campo, sem, val)}
-              saved={saved['contact_center']}
             />
             <div className="mt-4 flex justify-end">
               <button onClick={() => save('contact_center', contactCenter)} disabled={saving}
