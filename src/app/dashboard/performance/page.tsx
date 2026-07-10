@@ -17,6 +17,17 @@ export default function PerformancePage() {
           </div>
           <span className="text-xs text-purple-400 font-semibold">Abrir dashboard →</span>
         </Link>
+        <Link href="/dashboard/performance/solange"
+          className="glass rounded-2xl p-5 border border-pink-500/30 hover:border-pink-500/60 transition group cursor-pointer">
+          <div className="flex items-center gap-3 mb-2">
+            <span className="text-3xl">✨</span>
+            <div>
+              <p className="font-bold text-white group-hover:text-pink-300 transition">Solange</p>
+              <p className="text-xs text-zinc-400">Funil Mulheres · Influenciadores · Stories</p>
+            </div>
+          </div>
+          <span className="text-xs text-pink-400 font-semibold">Abrir dashboard →</span>
+        </Link>
       </div>
     </div>
   )
