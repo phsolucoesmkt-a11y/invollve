@@ -1,5 +1,4 @@
-import { NextResponse } from 'next/server'
-import { getSession } from '@/lib/session'
+import { NextRequest, NextResponse } from 'next/server'
 import db from '@/lib/db'
 
 const MULHERES = [
@@ -39,9 +38,9 @@ const MULHERES = [
   { nome: 'Katharina Vidal Pedrosa', whatsapp: '', email: 'katharinavidal@gmail.com', quem_contatou: 'Pedro', obs: 'sem numero' },
 ]
 
-export async function POST() {
-  const session = await getSession()
-  if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+export async function POST(req: NextRequest) {
+  const secret = req.headers.get('x-seed-secret')
+  if (secret !== 'invollve-seed-2026') return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const existing = await db.all('SELECT COUNT(*) as n FROM solange_mulheres') as any[]
   if (existing[0]?.n > 0) {
