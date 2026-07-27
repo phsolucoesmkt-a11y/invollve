@@ -40,6 +40,7 @@ export default function TarefasPage() {
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [showDateMenu, setShowDateMenu] = useState(false)
+  const [filterAssignee, setFilterAssignee] = useState('all')
 
   async function load() {
     const [t, u, c] = await Promise.all([
@@ -98,7 +99,14 @@ export default function TarefasPage() {
     return true
   }
 
-  const visibleTasks = tasks.filter(matchesDate)
+  // Segmentar por pessoa (responsável)
+  function matchesAssignee(task: any) {
+    if (filterAssignee === 'all') return true
+    if (filterAssignee === 'none') return !task.assigned_to
+    return String(task.assigned_to || '') === filterAssignee
+  }
+
+  const visibleTasks = tasks.filter(t => matchesDate(t) && matchesAssignee(t))
   const activeFilterLabel = DATE_FILTERS.find(f => f.id === dateFilter)?.label || 'Todas as datas'
 
   async function remove(id: number) {
@@ -114,6 +122,13 @@ export default function TarefasPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-black text-white">✅ Tarefas</h1>
         <div className="flex items-center gap-3">
+          {/* Segmentar por pessoa (responsável) */}
+          <select value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}
+            className={`px-3 py-2 rounded-xl text-sm border transition-colors ${filterAssignee !== 'all' ? 'border-purple-500/50 text-purple-300 bg-purple-500/10' : 'border-white/10 text-zinc-300 bg-white/5 hover:bg-white/10'}`}>
+            <option value="all">👥 Todos os responsáveis</option>
+            {users.map((u: any) => <option key={u.id} value={String(u.id)}>{u.name}</option>)}
+            <option value="none">Sem responsável</option>
+          </select>
           {/* Filtro por data estilo ClickUp */}
           <div className="relative">
             <button onClick={() => setShowDateMenu(v => !v)}

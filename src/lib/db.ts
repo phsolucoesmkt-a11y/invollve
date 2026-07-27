@@ -34,6 +34,7 @@ const TABLES = [
     value REAL,
     notes TEXT,
     responsible_id INTEGER,
+    lost_at TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   )`,
   `CREATE TABLE IF NOT EXISTS chat_messages (
@@ -121,6 +122,12 @@ const TABLES = [
   )`,
 ]
 
+// Migrações idempotentes para DBs já existentes (SQLite não tem ADD COLUMN IF NOT EXISTS).
+// Se a coluna já existe, o ALTER falha e o erro é ignorado.
+const MIGRATIONS = [
+  `ALTER TABLE leads ADD COLUMN lost_at TEXT`,
+]
+
 let _initialized = false
 
 async function ensureInit() {
@@ -128,6 +135,9 @@ async function ensureInit() {
   const client = getClient()
   for (const sql of TABLES) {
     await client.execute(sql)
+  }
+  for (const sql of MIGRATIONS) {
+    try { await client.execute(sql) } catch { /* coluna já existe */ }
   }
   _initialized = true
 }
