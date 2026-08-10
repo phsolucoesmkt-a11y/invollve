@@ -18,6 +18,7 @@ export default function ComercialPage() {
   const [form, setForm] = useState({ ...emptyForm })
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
+  const [filterResp, setFilterResp] = useState('all')
 
   async function load() {
     const [l, u] = await Promise.all([
@@ -49,24 +50,40 @@ export default function ComercialPage() {
     load()
   }
 
-  const totalValue = leads.filter(l => l.stage === 'fechado').reduce((a, l) => a + (l.value || 0), 0)
-  const pipeline = leads.filter(l => !['fechado', 'perdido'].includes(l.stage)).reduce((a, l) => a + (l.value || 0), 0)
+  // Segmentação por pessoa (responsável)
+  const visibleLeads = filterResp === 'all'
+    ? leads
+    : filterResp === 'none'
+      ? leads.filter(l => !l.responsible_id)
+      : leads.filter(l => String(l.responsible_id || '') === filterResp)
+
+  const totalValue = visibleLeads.filter(l => l.stage === 'fechado').reduce((a, l) => a + (l.value || 0), 0)
+  const pipeline = visibleLeads.filter(l => !['fechado', 'perdido'].includes(l.stage)).reduce((a, l) => a + (l.value || 0), 0)
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-black text-white">🚀 Comercial</h1>
-        <button onClick={() => { setShowForm(true); setEditId(null); setForm({ ...emptyForm }) }}
-          className="px-4 py-2 rounded-xl text-sm font-semibold text-white"
-          style={{ background: 'linear-gradient(135deg, #6c3de8, #ec4899)' }}>
-          + Novo Lead
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Segmentar por pessoa (responsável) */}
+          <select value={filterResp} onChange={e => setFilterResp(e.target.value)}
+            className={`px-3 py-2 rounded-xl text-sm border transition-colors ${filterResp !== 'all' ? 'border-purple-500/50 text-purple-300 bg-purple-500/10' : 'border-white/10 text-zinc-300 bg-white/5 hover:bg-white/10'}`}>
+            <option value="all">👥 Todos os responsáveis</option>
+            {users.map((u: any) => <option key={u.id} value={String(u.id)}>{u.name}</option>)}
+            <option value="none">Sem responsável</option>
+          </select>
+          <button onClick={() => { setShowForm(true); setEditId(null); setForm({ ...emptyForm }) }}
+            className="px-4 py-2 rounded-xl text-sm font-semibold text-white"
+            style={{ background: 'linear-gradient(135deg, #6c3de8, #ec4899)' }}>
+            + Novo Lead
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="glass rounded-2xl p-5">
           <p className="text-zinc-400 text-sm">Total Leads</p>
-          <p className="text-3xl font-black text-white">{leads.length}</p>
+          <p className="text-3xl font-black text-white">{visibleLeads.length}</p>
         </div>
         <div className="glass rounded-2xl p-5">
           <p className="text-zinc-400 text-sm">Pipeline (em aberto)</p>
@@ -112,9 +129,10 @@ export default function ComercialPage() {
       <div className="grid grid-cols-3 xl:grid-cols-6 gap-3">
         {STAGES.map(stage => (
           <div key={stage.id} className="glass rounded-2xl p-3">
-            <h2 className={`font-bold text-xs mb-3 ${stage.color}`}>{stage.label} ({leads.filter(l => l.stage === stage.id).length})</h2>
+            <h2 className={`font-bold text-xs mb-3 ${stage.color}`}>{stage.label} ({visibleLeads.filter(l => l.stage === stage.id).length})</h2>
+            {stage.id === 'perdido' && <p className="text-red-400/60 text-[10px] mb-2">⏳ Excluídos automaticamente após 5 dias</p>}
             <div className="space-y-2">
-              {leads.filter(l => l.stage === stage.id).map(lead => (
+              {visibleLeads.filter(l => l.stage === stage.id).map(lead => (
                 <div key={lead.id} className={`rounded-xl p-3 border border-white/5 ${stage.bg}`}>
                   <p className="text-white text-xs font-semibold">{lead.name}</p>
                   {lead.company && <p className="text-zinc-400 text-xs">{lead.company}</p>}
@@ -129,7 +147,7 @@ export default function ComercialPage() {
                   </select>
                 </div>
               ))}
-              {leads.filter(l => l.stage === stage.id).length === 0 && <p className="text-zinc-700 text-xs text-center py-3">—</p>}
+              {visibleLeads.filter(l => l.stage === stage.id).length === 0 && <p className="text-zinc-700 text-xs text-center py-3">—</p>}
             </div>
           </div>
         ))}
