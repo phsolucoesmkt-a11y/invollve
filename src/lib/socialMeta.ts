@@ -326,18 +326,96 @@ function toBR(iso: string): string {
   return new Date(new Date(iso).getTime() - 3 * 3600_000).toISOString().slice(0, 10)
 }
 
+// ── Perfil de quem entrega (ex.: Amanda posta no próprio perfil) ──────────────────
+// Usa a "Business Discovery" da Meta: lê posts públicos de outro perfil profissional
+// (curtidas e comentários; visualizações/alcance só o dono do perfil enxerga).
+export async function getConfig(slug: string, chave: string): Promise<string | null> {
+  const row = await db.get<{ valor: string | null }>('SELECT valor FROM social_config WHERE cliente = ? AND chave = ?', [slug, chave])
+  return row?.valor ?? null
+}
+export async function setConfig(slug: string, chave: string, valor: string | null) {
+  await db.run(
+    `INSERT INTO social_config (cliente, chave, valor) VALUES (?, ?, ?)
+     ON CONFLICT(cliente, chave) DO UPDATE SET valor = excluded.valor`, [slug, chave, valor]
+  )
+}
+const cleanHandle = (h: string | null | undefined) => (h || '').trim().replace(/^@/, '').replace(/\/+$/, '').split('/').pop() || ''
+
+// @ de cada entrega: o salvo na página interna tem prioridade sobre a variável de ambiente
+export async function entregasDe(slug: string) {
+  const c = CLIENTS[slug]
+  return Promise.all((c?.entregas || []).map(async e => ({
+    ...e, handle: cleanHandle((await getConfig(slug, `handle:${e.nome}`)) || e.handle) || undefined,
+  })))
+}
+export const perfilPlataforma = (nome: string) => `perfil:${nome}`
+
+async function discoveryPage(igId: string, handle: string, after: string | null, withThumb: boolean) {
+  const mediaFields = `id,caption,media_type,${withThumb ? 'media_product_type,thumbnail_url,' : ''}media_url,permalink,timestamp,like_count,comments_count`
+  const media = `media${after ? `.after(${after})` : ''}.limit(50){${mediaFields}}`
+  const json = await graph(igId, { fields: `business_discovery.username(${handle}){username,${media}}` })
+  return json.business_discovery?.media || { data: [] }
+}
+async function collectPerfil(c: SocialClient, nome: string, handle: string, from: string, toIncl: string, errors: string[]) {
+  const posts: any[] = []
+  let withThumb = true
+  let after: string | null = null
+  try {
+    for (let page = 0; page < 20; page++) {
+      let media
+      try { media = await discoveryPage(c.igId, handle, after, withThumb) } catch (e) {
+        if (!withThumb) throw e
+        withThumb = false // versão da API sem esses campos: tenta sem
+        media = await discoveryPage(c.igId, handle, after, withThumb)
+      }
+      for (const m of media.data || []) {
+        const d = toBR(m.timestamp)
+        if (d >= from && d <= toIncl) posts.push(m)
+      }
+      const last = media.data?.[media.data.length - 1]
+      after = media.paging?.cursors?.after || null
+      if (!after || !last || toBR(last.timestamp) < from) break
+    }
+  } catch (e: any) {
+    errors.push(`Perfil @${handle} (${nome}): ${e.message}`)
+    return
+  }
+  for (const m of posts) {
+    const tipo = m.media_product_type === 'REELS' ? 'reels' : m.media_type === 'CAROUSEL_ALBUM' ? 'carrossel' : m.media_type === 'VIDEO' ? 'video' : 'foto'
+    const likes = m.like_count ?? null, coms = m.comments_count ?? null
+    await savePost(c.slug, {
+      plataforma: perfilPlataforma(nome), post_id: m.id, data: m.timestamp, tipo,
+      legenda: m.caption ?? null, thumb_url: m.thumbnail_url || m.media_url || null, permalink: m.permalink ?? null,
+      visualizacoes: null, alcance: null,
+      interacoes: likes != null || coms != null ? (likes || 0) + (coms || 0) : null,
+      curtidas: likes, comentarios: coms, salvos: null, compart: null,
+    }, nome) // tudo que ela posta no perfil conta como entrega; a equipe pode desmarcar
+  }
+}
+
 export async function readPosts(slug: string, from: string, to: string) {
   const rows = await db.all<Record<string, unknown>>(
     `SELECT plataforma, post_id, data, tipo, legenda, permalink, visualizacoes, alcance, interacoes,
-            curtidas, comentarios, salvos, compart, autor
+            curtidas, comentarios, salvos, compart, NULLIF(autor, '') AS autor
      FROM social_posts WHERE cliente = ? AND data >= ? AND data < ? ORDER BY data DESC`,
     [slug, `${from}T03:00:00`, `${addDays(to, 1)}T03:00:00`]
   )
-  return { posts: rows, entregas: (CLIENTS[slug]?.entregas || []).map(e => ({ nome: e.nome, meta: e.meta })) }
+  const entregas = (await entregasDe(slug)).map(e => ({ nome: e.nome, meta: e.meta, handle: e.handle ?? null }))
+  return { posts: rows, entregas }
 }
 
+// autor '' = desmarcado de propósito (a próxima coleta não marca de novo)
 export async function tagPost(slug: string, plataforma: string, postId: string, autor: string | null) {
-  await db.run('UPDATE social_posts SET autor = ? WHERE cliente = ? AND plataforma = ? AND post_id = ?', [autor, slug, plataforma, postId])
+  await db.run('UPDATE social_posts SET autor = ? WHERE cliente = ? AND plataforma = ? AND post_id = ?', [autor ?? '', slug, plataforma, postId])
+}
+
+// Links de foto de perfis de terceiros expiram: relê os posts recentes do perfil e atualiza
+export async function refreshPerfilFotos(slug: string, plataforma: string) {
+  const c = CLIENTS[slug]
+  const nome = plataforma.slice('perfil:'.length)
+  const e = (await entregasDe(slug)).find(x => x.nome === nome)
+  if (!c || !TOKEN || !e?.handle) return
+  await collectPerfil(c, nome, e.handle, addDays(todayBR(), -400), todayBR(), [])
 }
 
 // Endereço atual da foto do post (os links da Meta expiram, então pedimos um novo quando dá)
@@ -371,6 +449,9 @@ export async function collect(slug: string, opts: { from?: string; to?: string }
   const from = opts.from || addDays(to, -2)
   const days: string[] = []
   for (let d = from; d <= to; d = addDays(d, 1)) days.push(d)
+
+  // @ das entregas salvos na página interna (usados para marcar posts e ler o perfil de quem entrega)
+  c.entregas = await entregasDe(slug)
 
   // Esquece falhas de coletas anteriores (podem ter sido instabilidade da rede)
   for (const k of Object.keys(igWorking)) if (igWorking[k] === null) delete igWorking[k]
@@ -406,6 +487,9 @@ export async function collect(slug: string, opts: { from?: string; to?: string }
   const postsFrom = opts.from || addDays(to, -35)
   await collectInstagramPosts(c, postsFrom, to, errors)
   if (page) await collectFacebookPosts(c, page, postsFrom, to, errors)
+  for (const e of c.entregas || []) {
+    if (e.handle) await collectPerfil(c, e.nome, e.handle, postsFrom, to, errors)
+  }
 
   if (!opts.from) await snapshotFollowers(c, page?.token ?? null, to)
 

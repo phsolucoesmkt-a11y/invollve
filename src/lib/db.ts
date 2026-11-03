@@ -195,6 +195,13 @@ const TABLES = [
     atualizado_em TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (cliente, plataforma, post_id)
   )`,
+  // Ajustes do dashboard de redes por cliente (ex.: chave 'handle:Amanda' = @ do perfil dela)
+  `CREATE TABLE IF NOT EXISTS social_config (
+    cliente TEXT NOT NULL,
+    chave TEXT NOT NULL,
+    valor TEXT,
+    PRIMARY KEY (cliente, chave)
+  )`,
   // Link público (sem login) do dashboard de cada cliente
   `CREATE TABLE IF NOT EXISTS social_share (
     cliente TEXT PRIMARY KEY,

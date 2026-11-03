@@ -1,9 +1,9 @@
 'use client'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Eye, Users, Heart, MousePointerClick, UserRound, UserPlus, ChevronLeft, ChevronRight,
   Copy, Check, RefreshCw, Download, Trophy, CalendarDays, TrendingUp, TrendingDown,
-  Activity, Target, BarChart3, Table2, Zap, Snail,
+  Activity, Target, BarChart3, Table2, Zap, Snail, Camera,
 } from 'lucide-react'
 import { BarChart, CountUp, LineChart, PREV_COLOR, Radar, Sparkline, fmt, type Bar, type LinePoint, type RadarAxis } from './charts'
 import PostsSections from './PostsSections'
@@ -95,6 +95,9 @@ const CSS = `
 .sd-card{background:#0d0a14;border:1px solid rgba(255,255,255,0.10);border-radius:18px}
 .sd-card:hover{border-color:rgba(255,255,255,0.16)}
 .sd-date{color-scheme:dark}
+/* modo foto: tudo parado no estado final */
+.sd-capture *,.sd-capture{animation:none!important;transition:none!important}
+.sd-capture .sd-draw{stroke-dashoffset:0!important}
 @media (prefers-reduced-motion: reduce){.sd-draw,.sd-fade,.sd-grow,.sd-in{animation:none;stroke-dashoffset:0}}
 `
 
@@ -126,6 +129,8 @@ export default function SocialDashboard({ cliente, token, interno }: { cliente: 
   const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState('')
   const [showTable, setShowTable] = useState(false)
+  const [shooting, setShooting] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
 
   function setMode(m: Mode) {
     setModeState(m)
@@ -297,6 +302,28 @@ export default function SocialDashboard({ cliente, token, interno }: { cliente: 
     } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Falha') }
     setBusy('')
   }
+  // Foto da página inteira (um PNG só) para mandar o resultado completo
+  async function baixarImagem() {
+    const el = rootRef.current
+    if (!el || shooting) return
+    setShooting(true)
+    el.classList.add('sd-capture')
+    try {
+      await new Promise(r => setTimeout(r, 120))
+      const { toPng } = await import('html-to-image')
+      const url = await toPng(el, {
+        pixelRatio: 2, backgroundColor: '#0a0613', cacheBust: true,
+        style: { margin: '0', padding: '24px' },
+        width: el.offsetWidth + 48, height: el.offsetHeight + 48,
+        filter: n => !(n instanceof HTMLElement && n.dataset.noprint !== undefined),
+      })
+      const nome = `${(data?.cliente || 'Real').replace(/\s+/g, '-')}_${PLATS[plat].nome}_${rangeLabel(mode, { start, end }).replace(/[\s/–]+/g, '-')}.png`
+      const a = document.createElement('a')
+      a.href = url; a.download = nome; a.click()
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Não foi possível gerar a imagem') }
+    el.classList.remove('sd-capture')
+    setShooting(false)
+  }
   const shareUrl = data?.share_token && typeof window !== 'undefined' ? `${window.location.origin}/r/${data.share_token}` : ''
 
   const presets: { label: string; r: () => Range }[] = [
@@ -308,7 +335,7 @@ export default function SocialDashboard({ cliente, token, interno }: { cliente: 
   ]
 
   return (
-    <div className="mx-auto max-w-[1240px]">
+    <div ref={rootRef} className="mx-auto max-w-[1240px]">
       <style>{CSS}</style>
 
       {/* Cabeçalho */}
@@ -326,6 +353,11 @@ export default function SocialDashboard({ cliente, token, interno }: { cliente: 
               : 'Aguardando a primeira atualização'}
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        <button onClick={baixarImagem} disabled={shooting} data-noprint title="Baixa a página inteira como uma imagem"
+          className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[#0d0a14] px-4 py-3 text-sm font-bold text-white transition hover:bg-white/5 active:scale-95 disabled:opacity-60">
+          <Camera size={16} className={shooting ? 'animate-pulse' : ''} />{shooting ? 'Gerando imagem…' : 'Baixar imagem'}
+        </button>
         <div className="flex rounded-2xl border border-white/10 bg-[#0d0a14] p-1">
           {(Object.keys(PLATS) as Plat[]).map(p => (
             <button key={p} onClick={() => { setPlat(p); if (!METRICS[p].some(m => m.key === metric)) setMetric('visualizacoes') }}
@@ -336,11 +368,12 @@ export default function SocialDashboard({ cliente, token, interno }: { cliente: 
             </button>
           ))}
         </div>
+        </div>
       </div>
 
       {/* Ferramentas internas (só equipe Invollve) */}
       {interno && (
-        <div className="sd-card mb-5 flex flex-wrap items-center gap-3 p-4 text-sm">
+        <div data-noprint className="sd-card mb-5 flex flex-wrap items-center gap-3 p-4 text-sm">
           <div className="min-w-0 flex-1">
             <p className="text-xs text-zinc-400">Link para o cliente (abre sem login)</p>
             <p className="truncate font-mono text-xs text-white">{shareUrl || '—'}</p>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
-import { CLIENTS, postImageUrl, slugByToken } from '@/lib/socialMeta'
+import { CLIENTS, postImageUrl, refreshPerfilFotos, slugByToken } from '@/lib/socialMeta'
 
 // Foto de um post (?p=plataforma&id=post_id). Os links da Meta expiram,
 // então o servidor busca a imagem atual e devolve com cache de 1 dia.
@@ -16,7 +16,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ clie
 
   const plataforma = sp.get('p') || 'instagram'
   const id = sp.get('id') || ''
-  const url = await postImageUrl(cliente, plataforma, id)
+  let url = await postImageUrl(cliente, plataforma, id)
+  // Foto de perfil de terceiros (ex.: Amanda) com link vencido: relê o perfil e tenta de novo
+  if (url && plataforma.startsWith('perfil:') && !url.startsWith('data:')) {
+    const ok = await fetch(url, { method: 'HEAD', cache: 'no-store' }).then(r => r.ok).catch(() => false)
+    if (!ok) { await refreshPerfilFotos(cliente, plataforma); url = await postImageUrl(cliente, plataforma, id) }
+  }
   if (url?.startsWith('data:image/')) {
     // imagem embutida (usada nos dados de teste local)
     const [meta, b64] = url.slice(5).split(',')
