@@ -120,6 +120,68 @@ const TABLES = [
     notes TEXT,
     updated_at TEXT DEFAULT (datetime('now'))
   )`,
+  `CREATE TABLE IF NOT EXISTS performance_real (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mes TEXT NOT NULL,
+    tipo TEXT NOT NULL,
+    dados TEXT NOT NULL,
+    atualizado_por INTEGER,
+    atualizado_em TEXT DEFAULT (datetime('now')),
+    UNIQUE(mes, tipo)
+  )`,
+  `CREATE TABLE IF NOT EXISTS solange_mulheres (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL,
+    whatsapp TEXT,
+    email TEXT,
+    quem_contatou TEXT,
+    status TEXT DEFAULT 'contato_feito',
+    followup TEXT,
+    obs TEXT,
+    criado_em TEXT DEFAULT (datetime('now')),
+    atualizado_em TEXT DEFAULT (datetime('now'))
+  )`,
+  `CREATE TABLE IF NOT EXISTS solange_influenciadores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL,
+    perfil TEXT,
+    seguidores TEXT,
+    nicho TEXT,
+    status TEXT DEFAULT 'chamado',
+    obs TEXT,
+    criado_em TEXT DEFAULT (datetime('now')),
+    atualizado_em TEXT DEFAULT (datetime('now'))
+  )`,
+  `CREATE TABLE IF NOT EXISTS solange_stories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    semana TEXT NOT NULL,
+    acao TEXT NOT NULL,
+    descricao TEXT,
+    alcance INTEGER DEFAULT 0,
+    cliques INTEGER DEFAULT 0,
+    respostas INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'planejado',
+    criado_em TEXT DEFAULT (datetime('now'))
+  )`,
+  // Orgânico das redes (Meta) — um valor por dia / semana / mês, gravado pela coleta noturna
+  `CREATE TABLE IF NOT EXISTS social_metrics (
+    cliente TEXT NOT NULL,
+    plataforma TEXT NOT NULL,
+    metrica TEXT NOT NULL,
+    granularidade TEXT NOT NULL,
+    inicio TEXT NOT NULL,
+    valor REAL NOT NULL,
+    atualizado_em TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (cliente, plataforma, metrica, granularidade, inicio)
+  )`,
+  // Link público (sem login) do dashboard de cada cliente
+  `CREATE TABLE IF NOT EXISTS social_share (
+    cliente TEXT PRIMARY KEY,
+    token TEXT UNIQUE NOT NULL,
+    ultima_coleta TEXT,
+    ultimo_erro TEXT,
+    criado_em TEXT DEFAULT (datetime('now'))
+  )`,
 ]
 
 // Migrações idempotentes para DBs já existentes (SQLite não tem ADD COLUMN IF NOT EXISTS).
