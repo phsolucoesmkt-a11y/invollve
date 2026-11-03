@@ -284,12 +284,11 @@ export async function refreshIfStale(slug: string) {
   }
 }
 
-export async function readYear(slug: string, year: number) {
-  // Ano pedido + ano anterior inteiro (comparação anual e da 1ª semana/mês)
+export async function readRange(slug: string, from: string, to: string) {
   const rows = await db.all<{ plataforma: string; metrica: string; granularidade: string; inicio: string; valor: number }>(
     `SELECT plataforma, metrica, granularidade, inicio, valor FROM social_metrics
      WHERE cliente = ? AND inicio >= ? AND inicio <= ? ORDER BY inicio`,
-    [slug, `${year - 1}-01-01`, `${year}-12-31`]
+    [slug, from, to]
   )
   const share = await getShare(slug)
   return { cliente: CLIENTS[slug]?.nome, rows, ultima_coleta: share.ultima_coleta, ultimo_erro: share.ultimo_erro, token_ok: !!TOKEN }
