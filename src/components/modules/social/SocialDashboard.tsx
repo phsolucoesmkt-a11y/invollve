@@ -6,6 +6,7 @@ import {
   Activity, Target, BarChart3, Table2, Zap, Snail,
 } from 'lucide-react'
 import { BarChart, CountUp, LineChart, PREV_COLOR, Radar, Sparkline, fmt, type Bar, type LinePoint, type RadarAxis } from './charts'
+import PostsSections from './PostsSections'
 
 // ── Tipos e definições ─────────────────────────────────────────────────────────
 type Row = { plataforma: string; metrica: string; granularidade: string; inicio: string; valor: number }
@@ -530,6 +531,10 @@ export default function SocialDashboard({ cliente, token, interno }: { cliente: 
               </ul>
             </Card>
           </div>
+
+          {/* Melhores conteúdos do período + entregas mensais */}
+          <PostsSections cliente={cliente} token={token} interno={interno} plat={plat} start={start} end={effEnd}
+            color={color} soft={PLATS[plat].soft} platNome={PLATS[plat].nome} />
 
           {/* Tabela (mesmos números, para quem prefere ler) */}
           <section className="sd-card">

@@ -13,6 +13,8 @@ export interface SocialClient {
   nome: string
   igId: string
   pageId?: string
+  // Quem entrega conteúdos fixos por mês (ex.: Amanda, 4/mês). Com @ configurado, posts que citam o @ são marcados sozinhos.
+  entregas?: { nome: string; meta: number; handle?: string }[]
 }
 
 export const CLIENTS: Record<string, SocialClient> = {
@@ -21,6 +23,7 @@ export const CLIENTS: Record<string, SocialClient> = {
     nome: 'Real Equipamentos',
     igId: process.env.META_REAL_IG_ID || '17841400315502599',
     pageId: process.env.META_REAL_PAGE_ID || undefined,
+    entregas: [{ nome: 'Amanda', meta: 4, handle: process.env.META_REAL_AMANDA_HANDLE || undefined }],
   },
 }
 
@@ -201,6 +204,161 @@ async function collectFacebook(c: SocialClient, page: { pageId: string; token: s
   if (missing.length) errors.push(`Facebook sem: ${missing.join(', ')}`)
 }
 
+// ── Posts (conteúdos) ───────────────────────────────────────────────────────────
+// Guarda cada post com seus números; os números de um post continuam crescendo dias
+// depois de publicado, por isso a coleta diária reatualiza os posts dos últimos 35 dias.
+type PostRow = {
+  plataforma: string; post_id: string; data: string; tipo: string; legenda: string | null
+  thumb_url: string | null; permalink: string | null
+  visualizacoes: number | null; alcance: number | null; interacoes: number | null
+  curtidas: number | null; comentarios: number | null; salvos: number | null; compart: number | null
+}
+
+async function savePost(cliente: string, p: PostRow, autoAutor: string | null) {
+  await db.run(
+    `INSERT INTO social_posts (cliente, plataforma, post_id, data, tipo, legenda, thumb_url, permalink,
+       visualizacoes, alcance, interacoes, curtidas, comentarios, salvos, compart, autor, atualizado_em)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(cliente, plataforma, post_id) DO UPDATE SET
+       data=excluded.data, tipo=excluded.tipo, legenda=excluded.legenda, thumb_url=excluded.thumb_url, permalink=excluded.permalink,
+       visualizacoes=excluded.visualizacoes, alcance=excluded.alcance, interacoes=excluded.interacoes,
+       curtidas=excluded.curtidas, comentarios=excluded.comentarios, salvos=excluded.salvos, compart=excluded.compart,
+       autor=COALESCE(social_posts.autor, excluded.autor), atualizado_em=excluded.atualizado_em`,
+    [cliente, p.plataforma, p.post_id, p.data, p.tipo, p.legenda, p.thumb_url, p.permalink,
+      p.visualizacoes, p.alcance, p.interacoes, p.curtidas, p.comentarios, p.salvos, p.compart, autoAutor]
+  )
+}
+
+// Executa no máximo `n` chamadas ao mesmo tempo
+async function pool<T>(items: T[], n: number, fn: (item: T) => Promise<void>) {
+  let i = 0
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (i < items.length) await fn(items[i++])
+  }))
+}
+
+function autoAutor(c: SocialClient, legenda: string | null): string | null {
+  const txt = (legenda || '').toLowerCase()
+  for (const e of c.entregas || []) {
+    if (e.handle && txt.includes(e.handle.toLowerCase().replace(/^@?/, '@'))) return e.nome
+  }
+  return null
+}
+
+async function collectInstagramPosts(c: SocialClient, from: string, toIncl: string, errors: string[]) {
+  const fields = 'id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count'
+  const posts: any[] = []
+  try {
+    let json = await graph(`${c.igId}/media`, { fields, limit: '50' })
+    // a lista vem do mais novo para o mais antigo; para quando passar do início do período
+    for (let page = 0; page < 40; page++) {
+      for (const m of json.data || []) {
+        const d = toBR(m.timestamp)
+        if (d >= from && d <= toIncl) posts.push(m)
+      }
+      const last = json.data?.[json.data.length - 1]
+      if (!json.paging?.next || !last || toBR(last.timestamp) < from) break
+      const res = await fetch(json.paging.next, { cache: 'no-store' })
+      json = await res.json()
+      if (json.error) throw new Error(json.error.message)
+    }
+  } catch (e: any) {
+    errors.push(`Posts do Instagram: ${e.message}`)
+    return
+  }
+
+  await pool(posts, 5, async m => {
+    const ins: Record<string, number> = {}
+    for (const metric of ['views,reach,total_interactions,saved,shares', 'reach,total_interactions,saved,shares', 'reach']) {
+      try {
+        const json = await graph(`${m.id}/insights`, { metric })
+        for (const it of json.data || []) ins[it.name] = it.values?.[0]?.value ?? it.total_value?.value ?? 0
+        break
+      } catch { /* tenta um conjunto menor de métricas */ }
+    }
+    const tipo = m.media_product_type === 'REELS' ? 'reels' : m.media_type === 'CAROUSEL_ALBUM' ? 'carrossel' : m.media_type === 'VIDEO' ? 'video' : 'foto'
+    await savePost(c.slug, {
+      plataforma: 'instagram', post_id: m.id, data: m.timestamp, tipo,
+      legenda: m.caption ?? null, thumb_url: m.thumbnail_url || m.media_url || null, permalink: m.permalink ?? null,
+      visualizacoes: ins.views ?? null, alcance: ins.reach ?? null, interacoes: ins.total_interactions ?? null,
+      curtidas: m.like_count ?? null, comentarios: m.comments_count ?? null, salvos: ins.saved ?? null, compart: ins.shares ?? null,
+    }, autoAutor(c, m.caption ?? null))
+  })
+}
+
+async function collectFacebookPosts(c: SocialClient, page: { pageId: string; token: string }, from: string, toIncl: string, errors: string[]) {
+  let posts: any[] = []
+  try {
+    const json = await graph(`${page.pageId}/posts`, {
+      fields: 'id,message,created_time,full_picture,permalink_url,shares,reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0)',
+      since: String(tsBR(from)), until: String(tsBR(addDays(toIncl, 1))), limit: '100',
+    }, page.token)
+    posts = json.data || []
+  } catch (e: any) {
+    errors.push(`Posts do Facebook: ${e.message}`)
+    return
+  }
+  await pool(posts, 5, async p => {
+    const ins: Record<string, number> = {}
+    for (const metric of ['post_media_view,post_total_media_view_unique', 'post_impressions,post_impressions_unique']) {
+      try {
+        const json = await graph(`${p.id}/insights`, { metric }, page.token)
+        for (const it of json.data || []) ins[it.name] = Number(it.values?.[0]?.value) || 0
+        break
+      } catch { /* tenta os nomes antigos */ }
+    }
+    const reacoes = p.reactions?.summary?.total_count ?? null
+    const coment = p.comments?.summary?.total_count ?? null
+    const comp = p.shares?.count ?? null
+    await savePost(c.slug, {
+      plataforma: 'facebook', post_id: p.id, data: p.created_time, tipo: 'post',
+      legenda: p.message ?? null, thumb_url: p.full_picture ?? null, permalink: p.permalink_url ?? null,
+      visualizacoes: ins.post_media_view ?? ins.post_impressions ?? null,
+      alcance: ins.post_total_media_view_unique ?? ins.post_impressions_unique ?? null,
+      interacoes: reacoes != null || coment != null || comp != null ? (reacoes || 0) + (coment || 0) + (comp || 0) : null,
+      curtidas: reacoes, comentarios: coment, salvos: null, compart: comp,
+    }, autoAutor(c, p.message ?? null))
+  })
+}
+
+// Data/hora da Meta (UTC) → dia no fuso de Brasília
+function toBR(iso: string): string {
+  return new Date(new Date(iso).getTime() - 3 * 3600_000).toISOString().slice(0, 10)
+}
+
+export async function readPosts(slug: string, from: string, to: string) {
+  const rows = await db.all<Record<string, unknown>>(
+    `SELECT plataforma, post_id, data, tipo, legenda, permalink, visualizacoes, alcance, interacoes,
+            curtidas, comentarios, salvos, compart, autor
+     FROM social_posts WHERE cliente = ? AND data >= ? AND data < ? ORDER BY data DESC`,
+    [slug, `${from}T03:00:00`, `${addDays(to, 1)}T03:00:00`]
+  )
+  return { posts: rows, entregas: (CLIENTS[slug]?.entregas || []).map(e => ({ nome: e.nome, meta: e.meta })) }
+}
+
+export async function tagPost(slug: string, plataforma: string, postId: string, autor: string | null) {
+  await db.run('UPDATE social_posts SET autor = ? WHERE cliente = ? AND plataforma = ? AND post_id = ?', [autor, slug, plataforma, postId])
+}
+
+// Endereço atual da foto do post (os links da Meta expiram, então pedimos um novo quando dá)
+export async function postImageUrl(slug: string, plataforma: string, postId: string): Promise<string | null> {
+  const row = await db.get<{ thumb_url: string | null }>(
+    'SELECT thumb_url FROM social_posts WHERE cliente = ? AND plataforma = ? AND post_id = ?', [slug, plataforma, postId]
+  )
+  if (!row) return null
+  if (TOKEN && plataforma === 'instagram') {
+    try {
+      const m = await graph(postId, { fields: 'media_url,thumbnail_url' })
+      const fresh = m.thumbnail_url || m.media_url
+      if (fresh) {
+        if (fresh !== row.thumb_url) await db.run('UPDATE social_posts SET thumb_url = ? WHERE cliente = ? AND post_id = ?', [fresh, slug, postId])
+        return fresh
+      }
+    } catch { /* usa a guardada */ }
+  }
+  return row.thumb_url
+}
+
 // ── Coleta principal ───────────────────────────────────────────────────────────
 export async function collect(slug: string, opts: { from?: string; to?: string } = {}) {
   const c = CLIENTS[slug]
@@ -243,6 +401,11 @@ export async function collect(slug: string, opts: { from?: string; to?: string }
   } else {
     errors.push('Facebook: o token não tem acesso à página da Real')
   }
+
+  // Posts: na coleta diária reatualiza os últimos 35 dias; na importação, o período pedido
+  const postsFrom = opts.from || addDays(to, -35)
+  await collectInstagramPosts(c, postsFrom, to, errors)
+  if (page) await collectFacebookPosts(c, page, postsFrom, to, errors)
 
   if (!opts.from) await snapshotFollowers(c, page?.token ?? null, to)
 

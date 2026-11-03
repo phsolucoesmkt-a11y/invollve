@@ -174,6 +174,27 @@ const TABLES = [
     atualizado_em TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (cliente, plataforma, metrica, granularidade, inicio)
   )`,
+  // Posts das redes com seus números; autor = quem entregou (ex.: 'Amanda'), marcado à mão ou pelo @ na legenda
+  `CREATE TABLE IF NOT EXISTS social_posts (
+    cliente TEXT NOT NULL,
+    plataforma TEXT NOT NULL,
+    post_id TEXT NOT NULL,
+    data TEXT NOT NULL,
+    tipo TEXT,
+    legenda TEXT,
+    thumb_url TEXT,
+    permalink TEXT,
+    visualizacoes REAL,
+    alcance REAL,
+    interacoes REAL,
+    curtidas REAL,
+    comentarios REAL,
+    salvos REAL,
+    compart REAL,
+    autor TEXT,
+    atualizado_em TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (cliente, plataforma, post_id)
+  )`,
   // Link público (sem login) do dashboard de cada cliente
   `CREATE TABLE IF NOT EXISTS social_share (
     cliente TEXT PRIMARY KEY,
